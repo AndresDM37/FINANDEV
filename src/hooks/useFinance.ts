@@ -3,6 +3,7 @@ import { useAuth } from "./useAuth";
 import {
   getIncomes,
   addIncome as addIncomeService,
+  updateIncome as updateIncomeService,
   deleteIncome as deleteIncomeService,
   getExpenses,
   addExpense as addExpenseService,
@@ -34,6 +35,7 @@ interface UseFinanceReturn {
   // Actions
   refresh: () => Promise<void>;
   addIncome: (data: Omit<NewIncome, "user_id">) => Promise<void>;
+  editIncome: (id: string, data: Partial<Omit<NewIncome, "user_id">>) => Promise<void>;
   removeIncome: (id: string) => Promise<void>;
   addExpense: (data: Omit<NewExpense, "user_id">) => Promise<void>;
   togglePaid: (id: string, paid: boolean) => Promise<void>;
@@ -112,6 +114,14 @@ export function useFinance(): UseFinanceReturn {
     [user, profile, refresh],
   );
 
+  const editIncome = useCallback(
+    async (id: string, data: Partial<Omit<NewIncome, "user_id">>) => {
+      await updateIncomeService(id, data);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const removeIncome = useCallback(
     async (id: string) => {
       await deleteIncomeService(id);
@@ -172,6 +182,7 @@ export function useFinance(): UseFinanceReturn {
     loading,
     refresh,
     addIncome,
+    editIncome,
     removeIncome,
     addExpense,
     togglePaid,

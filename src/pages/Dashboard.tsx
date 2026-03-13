@@ -15,6 +15,8 @@ import {
   CreditCard,
   User,
   Plane,
+  AlertTriangle,
+  Candy,
 } from "lucide-react";
 import { useFinance } from "../hooks/useFinance";
 import { useAuth } from "../hooks/useAuth";
@@ -165,7 +167,7 @@ export default function Dashboard() {
             </h2>
             <div className="flex items-center gap-2">
               <span className="text-red-400 text-xs font-bold flex items-center bg-red-400/10 px-1.5 py-0.5 rounded">
-                <span className="mr-1">⚠️</span> Vencen Pronto
+                <AlertTriangle size={12} className="mr-1" /> Vencen Pronto
               </span>
               <span className="text-slate-400 text-xs">3 servicios</span>
             </div>
@@ -319,7 +321,7 @@ export default function Dashboard() {
               <div className="bg-[#141b2e] border border-slate-800/80 rounded-2xl p-3.5 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-purple-900/40 flex items-center justify-center text-purple-400">
-                    <span className="text-xs">🍬</span>
+                    <Candy size={14} />
                   </div>
                   <div>
                     <p className="font-bold text-[13px] text-slate-100">

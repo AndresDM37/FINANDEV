@@ -89,12 +89,12 @@ export function computeFinancialSummary(
 }
 
 /**
- * Formatea un número como moneda (CLP / USD / etc.).
+ * Formatea un número como moneda (COP / USD / EUR / etc.).
  */
 export function formatCurrency(
   value: number,
-  locale = "es-CL",
-  currency = "CLP",
+  locale = "es-CO",
+  currency = "COP",
 ): string {
   return new Intl.NumberFormat(locale, {
     style: "currency",

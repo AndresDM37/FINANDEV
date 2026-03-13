@@ -8,6 +8,7 @@ import Incomes from "./pages/Incomes";
 import Expenses from "./pages/Expenses";
 import Savings from "./pages/Savings";
 import Admin from "./pages/Admin";
+import UpdatePassword from "./pages/UpdatePassword";
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/login" element={<Login />} />
+          <Route path="/update-password" element={<UpdatePassword />} />
 
           {/* Protected */}
           <Route

@@ -24,7 +24,7 @@ import {
 } from "../utils/security";
 
 export default function Login() {
-  const { user, signIn, signUp, loading } = useAuth();
+  const { user, signIn, signUp, loading, resetPassword } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,6 +38,10 @@ export default function Login() {
   const [lockoutMsg, setLockoutMsg] = useState("");
   const [signUpSuccess, setSignUpSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Password Recovery State
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   // Honeypot anti-bot
   const [honeypot, setHoneypot] = useState("");
@@ -131,6 +135,30 @@ export default function Login() {
     }
   };
 
+  const handleResetPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setFieldErrors({});
+
+    const cleanEmail = sanitizeEmail(email);
+    const emailValidation = validateEmail(cleanEmail);
+    if (!emailValidation.valid) {
+      setFieldErrors((prev) => ({ ...prev, email: emailValidation.error! }));
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await resetPassword(cleanEmail);
+      setResetSuccess(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error desconocido";
+      setError(safeAuthError(msg));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (signUpSuccess) {
     return (
       <div className="min-h-screen bg-[#0e1628] flex items-center justify-center p-4 font-sans">
@@ -156,6 +184,98 @@ export default function Login() {
           >
             Volver a iniciar sesión
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isForgotPassword) {
+    return (
+      <div className="min-h-screen bg-[#0e1628] flex items-center justify-center p-4 font-sans relative">
+        <div className="absolute top-0 left-0 w-[50%] h-[50%] bg-[#10b981]/5 blur-[150px] pointer-events-none" />
+        <div className="w-full max-w-[400px] relative z-10 text-center">
+          <div className="flex justify-center mb-6">
+            <div className="p-3.5 bg-[#22c55e] rounded-2xl shadow-[0_0_30px_rgba(34,197,94,0.25)]">
+              <Lock className="w-8 h-8 text-white" />
+            </div>
+          </div>
+          <h1 className="text-[28px] font-bold text-white tracking-tight mb-1.5">
+            Recuperar Contraseña
+          </h1>
+          <p className="text-[#64748b] mb-8 text-sm font-medium tracking-wide">
+            {resetSuccess
+              ? "Te hemos enviado un enlace para restablecer tu contraseña."
+              : "Ingresa tu email y te enviaremos un enlace para restablecer tu contraseña."}
+          </p>
+
+          {!resetSuccess ? (
+            <form onSubmit={handleResetPassword} className="space-y-5" noValidate>
+              <div className="space-y-2 text-left">
+                <label className="text-[13px] font-bold text-[#e2e8f0]">
+                  Correo Electrónico
+                </label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Mail className="h-5 w-5 text-[#64748b] group-focus-within:text-[#22c55e] transition-colors" />
+                  </div>
+                  <input
+                    type="email"
+                    className="w-full bg-[#1e293b]/80 border border-[#334155]/50 text-white pl-12 pr-4 py-3.5 rounded-xl outline-none focus:border-[#22c55e]/50 focus:ring-1 focus:ring-[#22c55e]/50 transition-all placeholder:text-[#475569] text-[15px]"
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                    }}
+                    required
+                  />
+                </div>
+                {fieldErrors.email && (
+                  <span className="text-xs text-red-400">{fieldErrors.email}</span>
+                )}
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs text-center animate-shake">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-[#22c55e] hover:bg-[#20b958] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl shadow-[0_4px_14px_0_rgba(34,197,94,0.39)] flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+              >
+                {submitting ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  "Enviar Enlace"
+                )}
+              </button>
+            </form>
+          ) : (
+             <button
+                className="w-full bg-[#22c55e] hover:bg-[#20b958] text-white font-bold py-3.5 rounded-xl transition-all"
+                onClick={() => {
+                  setIsForgotPassword(false);
+                  setResetSuccess(false);
+                }}
+              >
+                Volver a iniciar sesión
+              </button>
+          )}
+
+          <div className="mt-8">
+             <button
+              onClick={() => {
+                setIsForgotPassword(false);
+                setResetSuccess(false);
+              }}
+              className="text-[#64748b] hover:text-[#e2e8f0] text-sm font-medium transition-colors"
+            >
+              Volver atrás
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -237,6 +357,7 @@ export default function Login() {
               {!isSignUp && (
                 <button
                   type="button"
+                  onClick={() => setIsForgotPassword(true)}
                   className="text-[13px] font-bold text-[#22c55e] hover:text-[#16a34a] transition-colors"
                 >
                   ¿Olvidaste tu contraseña?

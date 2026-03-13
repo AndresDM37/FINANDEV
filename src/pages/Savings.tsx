@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
+import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Bot, Hand, Landmark } from "lucide-react";
 import { useFinance } from "../hooks/useFinance";
 import { formatCurrency } from "../utils/calculations";
 import type { SavingsMovementType } from "../types/finance.types";
@@ -89,12 +89,20 @@ export default function Savings() {
               ) : (
                 <ArrowUpCircle size={18} className="text-expense" />
               )}
-              <span>
-                {mov.type === "auto"
-                  ? "🤖 Auto"
-                  : mov.type === "manual"
-                    ? "✋ Manual"
-                    : "💸 Retiro"}
+              <span className="flex items-center gap-1.5">
+                {mov.type === "auto" ? (
+                  <>
+                    <Bot size={14} className="text-slate-400" /> Auto
+                  </>
+                ) : mov.type === "manual" ? (
+                  <>
+                    <Hand size={14} className="text-slate-400" /> Manual
+                  </>
+                ) : (
+                  <>
+                    <Landmark size={14} className="text-slate-400" /> Retiro
+                  </>
+                )}
               </span>
               {mov.note && <span className="text-muted"> — {mov.note}</span>}
             </div>

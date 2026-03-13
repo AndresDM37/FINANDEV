@@ -24,6 +24,8 @@ interface AuthContextValue {
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -51,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      const p = await getProfile(user.id);
+      const p = await getProfile(user.id, user.email || "");
       setProfile(p);
     } catch (err) {
       console.error("Error fetching profile:", err);
@@ -75,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
 
-      // 🛡️ Si el token fue revocado o la sesión expiró, limpiar
+      // Si el token fue revocado o la sesión expiró, limpiar
       if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED") {
         if (!s) {
           setUser(null);
@@ -97,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, refreshProfile]);
 
-  // 🛡️ Auto-logout por inactividad
+  // Auto-logout por inactividad
   useEffect(() => {
     if (!user) return;
 
@@ -123,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [user]);
 
-  // 🛡️ Detectar si la pestaña vuelve al foco y verificar sesión
+  // Detectar si la pestaña vuelve al foco y verificar sesión
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState === "visible" && user) {
@@ -163,6 +165,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   };
 
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/update-password`,
+    });
+    if (error) throw error;
+  };
+
+  const updatePassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -174,6 +188,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signOut,
         refreshProfile,
+        resetPassword,
+        updatePassword,
       }}
     >
       {children}

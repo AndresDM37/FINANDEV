@@ -14,13 +14,27 @@ import type {
 // Profile
 // ──────────────────────────────────────────────
 
-export async function getProfile(userId: string): Promise<Profile | null> {
+export async function getProfile(userId: string, email?: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", userId)
-    .single();
+    .maybeSingle();
+  
   if (error) throw error;
+  
+  if (!data) {
+    if (!email) return null;
+    // Fallback: Si no existe el perfil (probablemente falló el trigger), lo creamos manual.
+    const { data: newProfile, error: insertError } = await supabase
+      .from("profiles")
+      .insert({ id: userId, email: email, savings_percentage: 20 })
+      .select()
+      .single();
+    if (insertError) throw insertError;
+    return newProfile;
+  }
+
   return data;
 }
 
@@ -82,6 +96,18 @@ export async function deleteIncome(incomeId: string): Promise<void> {
   const { error } = await supabase.from("incomes").delete().eq("id", incomeId);
   if (error) throw error;
 }
+
+export async function updateIncome(
+  incomeId: string,
+  updates: Partial<NewIncome>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("incomes")
+    .update(updates)
+    .eq("id", incomeId);
+  if (error) throw error;
+}
+
 
 // ──────────────────────────────────────────────
 // Expenses

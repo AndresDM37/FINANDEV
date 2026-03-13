@@ -10,6 +10,7 @@ import {
   Calendar,
   Wallet,
   Check,
+  Coins,
 } from "lucide-react";
 
 interface TransactionModalProps {
@@ -27,8 +28,11 @@ export default function TransactionModal({
   const [amount, setAmount] = useState<string>("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("food");
-  const [wallet] = useState("Debit ••42");
+  const [wallet, setWallet] = useState("Bancolombia");
+  const [showWalletDropdown, setShowWalletDropdown] = useState(false);
   const [isSmallExpense, setIsSmallExpense] = useState(false);
+  const [currency, setCurrency] = useState("COP");
+  const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
 
   // Formatted date string for inputs
   const today = new Date();
@@ -37,21 +41,34 @@ export default function TransactionModal({
   if (!isOpen) return null;
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Only allow numbers and one decimal point
-    const value = e.target.value.replace(/[^0-9.]/g, "");
-    const parts = value.split(".");
-    if (parts.length > 2) return;
-    if (parts[1]?.length > 2) return;
-    setAmount(value);
+    let value = e.target.value;
+    
+    if (currency === "COP") {
+      const rawDigits = value.replace(/\D/g, "");
+      if (!rawDigits) {
+        setAmount("");
+        return;
+      }
+      const formatted = rawDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+      setAmount(formatted);
+    } else {
+      value = value.replace(/[^0-9.]/g, "");
+      const parts = value.split(".");
+      if (parts.length > 2) return;
+      if (parts[1]?.length > 2) return;
+      setAmount(value);
+    }
   };
 
   const handleSave = () => {
-    // Basic validation
-    if (!amount || parseFloat(amount) <= 0) return;
+    const rawAmount = currency === "COP" ? amount.replace(/\./g, "") : amount;
+    const parsedAmount = parseFloat(rawAmount);
+
+    if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) return;
 
     onSubmit({
       name: description || (categoryId === "food" ? "Comida" : "Transacción"),
-      amount: parseFloat(amount),
+      amount: parsedAmount,
       type: type,
       category: categoryId,
       wallet: wallet,
@@ -121,7 +138,7 @@ export default function TransactionModal({
               <span className="text-3xl text-slate-500 font-light mt-1">$</span>
               <input
                 type="text"
-                placeholder="0.00"
+                placeholder={currency === "COP" ? "0" : "0.00"}
                 value={amount}
                 onChange={handleAmountChange}
                 className="bg-transparent text-5xl font-semibold text-slate-200 w-auto max-w-[200px] text-center focus:outline-none placeholder-slate-700"
@@ -130,8 +147,38 @@ export default function TransactionModal({
             </div>
 
             {/* Currency Pill */}
-            <div className="bg-[#141b2e] hover:bg-[#1a2536] border border-[#1e293b] rounded-full px-3 py-1 text-xs font-semibold text-slate-300 flex items-center gap-1 cursor-pointer transition-colors">
-              USD <span className="text-[10px] ml-1 opacity-70">▼</span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowCurrencyDropdown(!showCurrencyDropdown)}
+                className="bg-[#141b2e] hover:bg-[#1a2536] border border-[#1e293b] rounded-full px-3 py-1 text-xs font-semibold text-slate-300 flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                {currency} <span className="text-[10px] ml-1 opacity-70">▼</span>
+              </button>
+              
+              {/* Dropdown */}
+              {showCurrencyDropdown && (
+                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-[#141b2e] border border-[#1e293b] rounded-xl shadow-xl overflow-hidden py-1 z-50 min-w-[80px]">
+                  {["COP", "USD", "EUR"].map((cur) => (
+                    <button
+                      key={cur}
+                      type="button"
+                      onClick={() => {
+                        if (cur !== currency) setAmount("");
+                        setCurrency(cur);
+                        setShowCurrencyDropdown(false);
+                      }}
+                      className={`block w-full text-left px-4 py-2 text-xs font-medium transition-colors ${
+                        currency === cur 
+                          ? "bg-emerald-500/10 text-emerald-500" 
+                          : "text-slate-300 hover:bg-[#1a2536]"
+                      }`}
+                    >
+                      {cur}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -206,17 +253,45 @@ export default function TransactionModal({
             </div>
 
             {/* Wallet Field */}
-            <div className="flex-1 bg-[#141b2e] hover:bg-[#1a2536] border border-[#1e293b] rounded-[20px] p-4 cursor-pointer transition-colors relative flex flex-col">
+            <div className="flex-1 bg-[#141b2e] hover:bg-[#1a2536] border border-[#1e293b] rounded-[20px] p-4 transition-colors relative flex flex-col">
               <div className="flex items-center gap-2 mb-1.5 opacity-60">
                 <Wallet size={14} className="text-slate-300" />
                 <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">
                   Billetera
                 </span>
               </div>
-              <div className="flex justify-between items-center text-slate-200">
+              
+              <button
+                type="button"
+                onClick={() => setShowWalletDropdown(!showWalletDropdown)}
+                className="w-full flex justify-between items-center text-slate-200 focus:outline-none"
+              >
                 <p className="text-[15px] font-semibold truncate">{wallet}</p>
                 <span className="text-[10px] opacity-60 ml-2">▼</span>
-              </div>
+              </button>
+
+               {/* Dropdown */}
+               {showWalletDropdown && (
+                <div className="absolute top-[85%] left-0 w-full bg-[#141b2e] border border-[#1e293b] rounded-xl shadow-xl overflow-hidden py-1 z-50">
+                  {["Bancolombia", "Nu", "Nequi"].map((bank) => (
+                    <button
+                      key={bank}
+                      type="button"
+                      onClick={() => {
+                        setWallet(bank);
+                        setShowWalletDropdown(false);
+                      }}
+                      className={`block w-full text-left px-4 py-2.5 text-sm font-medium transition-colors ${
+                        wallet === bank 
+                          ? "bg-emerald-500/10 text-emerald-500" 
+                          : "text-slate-300 hover:bg-[#1a2536]"
+                      }`}
+                    >
+                      {bank}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -224,8 +299,7 @@ export default function TransactionModal({
           <div className="bg-[#141b2e] border border-[#1e293b] rounded-[20px] p-4 flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-slate-800/50 flex items-center justify-center text-slate-400">
-                <span className="text-xs">💰</span>{" "}
-                {/* Emoji or custom small icon */}
+                <Coins size={14} />
               </div>
               <div>
                 <p className="text-sm font-bold text-slate-200">Gasto Menor</p>
