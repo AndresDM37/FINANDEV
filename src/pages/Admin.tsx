@@ -759,9 +759,17 @@ export default function Admin() {
             <h2 className="font-bold text-lg text-white">
               Movimientos Históricos
             </h2>
-            <span className="text-[11px] text-slate-500 font-semibold">
-              últimos {history.length}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-slate-500 font-semibold">
+                últimos {history.length}
+              </span>
+              <button
+                onClick={() => (window.location.href = "/reports")}
+                className="text-[11px] font-bold text-emerald-500 hover:text-emerald-400 transition-colors"
+              >
+                Ver reporte completo →
+              </button>
+            </div>
           </div>
           <div className="bg-[#141b2e] rounded-2xl border border-slate-800/80 divide-y divide-slate-800/80">
             {history.map((row) => (

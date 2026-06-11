@@ -21,7 +21,7 @@ const links = [
 
 export default function BottomNav() {
   return (
-    <nav className="bottom-nav">
+    <nav className="bottom-nav print:hidden">
       {links.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}

@@ -8,6 +8,7 @@ import Incomes from "./pages/Incomes";
 import Expenses from "./pages/Expenses";
 import Savings from "./pages/Savings";
 import Analytics from "./pages/Analytics";
+import Reports from "./pages/Reports";
 import Admin from "./pages/Admin";
 import ImportedTransactions from "./pages/ImportedTransactions";
 import UpdatePassword from "./pages/UpdatePassword";
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="/expenses" element={<Expenses />} />
             <Route path="/savings" element={<Savings />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/reports" element={<Reports />} />
             <Route path="/imported" element={<ImportedTransactions />} />
             <Route path="/admin" element={<Admin />} />
           </Route>

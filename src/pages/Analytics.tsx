@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
   Coins,
   PiggyBank,
@@ -6,6 +7,7 @@ import {
   TrendingUp,
   TrendingDown,
   BarChart3,
+  FileText,
 } from "lucide-react";
 import { useFinance } from "../hooks/useFinance";
 import {
@@ -95,8 +97,17 @@ export default function Analytics() {
             </h1>
             <p className="text-xs text-slate-400">Métricas personales</p>
           </div>
-          <div className="bg-emerald-500/10 text-emerald-500 p-2 rounded-xl">
-            <BarChart3 size={20} />
+          <div className="flex items-center gap-2">
+            <Link
+              to="/reports"
+              title="Reportes"
+              className="bg-emerald-500/10 text-emerald-500 p-2 rounded-xl hover:bg-emerald-500/20 transition-colors"
+            >
+              <FileText size={20} />
+            </Link>
+            <div className="bg-emerald-500/10 text-emerald-500 p-2 rounded-xl">
+              <BarChart3 size={20} />
+            </div>
           </div>
         </header>
 
