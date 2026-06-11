@@ -838,7 +838,10 @@ export default function Admin() {
           </span>
         </button>
 
-        <button className="flex flex-col items-center gap-1.5 opacity-60 hover:opacity-100 transition-opacity focus:outline-none">
+        <button
+          className="flex flex-col items-center gap-1.5 opacity-60 hover:opacity-100 transition-opacity focus:outline-none"
+          onClick={() => (window.location.href = "/analytics")}
+        >
           <PieChart size={20} className="text-slate-400" />
           <span className="text-[10px] font-semibold text-slate-400">
             Análisis

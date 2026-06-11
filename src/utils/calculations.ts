@@ -134,6 +134,105 @@ export function computeMonthlyVariableAverage(
 }
 
 /**
+ * % real de ahorro de un mes: ahorro neto (los retiros ya son negativos)
+ * sobre los ingresos del mes. Devuelve null si no hubo ingresos.
+ */
+export function computeMonthlySavingsRate(
+  incomes: Income[],
+  movements: SavingsMovement[],
+  year: number,
+  month: number,
+): number | null {
+  const monthIncome = incomes
+    .filter((i) => {
+      const d = new Date(i.received_at);
+      return d.getFullYear() === year && d.getMonth() === month;
+    })
+    .reduce((sum, i) => sum + i.amount, 0);
+  if (monthIncome <= 0) return null;
+
+  const monthNetSavings = movements
+    .filter((m) => {
+      const d = new Date(m.created_at);
+      return d.getFullYear() === year && d.getMonth() === month;
+    })
+    .reduce((sum, m) => sum + m.amount, 0);
+
+  return (monthNetSavings / monthIncome) * 100;
+}
+
+/**
+ * Mes con mayor gasto variable del año indicado. Solo considera gastos
+ * variables: los fijos son filas recurrentes únicas sin fecha por mes y
+ * agruparlos por created_at daría totales falsos. Null si no hay gastos.
+ */
+export function computeMostExpensiveMonth(
+  expenses: Expense[],
+  year: number,
+): { month: number; total: number } | null {
+  const totals = new Array<number>(12).fill(0);
+  for (const e of expenses) {
+    if (e.type !== "variable") continue;
+    const d = new Date(e.expense_date ?? e.created_at);
+    if (d.getFullYear() !== year) continue;
+    totals[d.getMonth()] += e.amount;
+  }
+  const max = Math.max(...totals);
+  if (max <= 0) return null;
+  return { month: totals.indexOf(max), total: max };
+}
+
+/** Punto de la serie de evolución del ahorro (saldo al cierre del mes). */
+export interface SavingsEvolutionPoint {
+  label: string; // "ene", "feb", ...
+  year: number;
+  month: number;
+  cumulative: number;
+}
+
+/**
+ * Serie mensual del saldo acumulado de ahorro para los últimos `monthsBack`
+ * meses (incluye el actual). Los meses anteriores a la ventana entran como
+ * saldo base, así el acumulado histórico no se pierde.
+ */
+export function computeSavingsEvolution(
+  movements: SavingsMovement[],
+  monthsBack = 6,
+): SavingsEvolutionPoint[] {
+  const now = new Date();
+  const windowStart = new Date(
+    now.getFullYear(),
+    now.getMonth() - (monthsBack - 1),
+    1,
+  );
+
+  let cumulative = movements
+    .filter((m) => new Date(m.created_at) < windowStart)
+    .reduce((sum, m) => sum + m.amount, 0);
+
+  const points: SavingsEvolutionPoint[] = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const ref = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthNet = movements
+      .filter((m) => {
+        const d = new Date(m.created_at);
+        return (
+          d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth()
+        );
+      })
+      .reduce((sum, m) => sum + m.amount, 0);
+    cumulative += monthNet;
+    points.push({
+      label: ref.toLocaleDateString("es-CO", { month: "short" }),
+      year: ref.getFullYear(),
+      month: ref.getMonth(),
+      cumulative,
+    });
+  }
+  return points;
+}
+
+/**
  * Formatea un número como moneda (COP / USD / EUR / etc.).
  */
 export function formatCurrency(
