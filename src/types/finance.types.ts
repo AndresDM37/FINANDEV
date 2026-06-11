@@ -7,6 +7,7 @@ export interface Profile {
   id: string;
   email: string;
   savings_percentage: number;
+  savings_goal: number | null;
   created_at: string;
 }
 
@@ -23,6 +24,15 @@ export interface Income {
 /** Tipo de gasto */
 export type ExpenseType = "fixed" | "variable";
 
+/** Categoría de gasto (variables/hormiga; los fijos van sin categoría) */
+export type ExpenseCategory =
+  | "food"
+  | "transport"
+  | "shopping"
+  | "fun"
+  | "travel"
+  | "other";
+
 /** Gasto (tabla expenses) */
 export interface Expense {
   id: string;
@@ -30,6 +40,7 @@ export interface Expense {
   name: string;
   amount: number;
   type: ExpenseType;
+  category: ExpenseCategory | null;
   due_day: number | null;
   expense_date: string | null; // date ISO
   recurring: boolean;

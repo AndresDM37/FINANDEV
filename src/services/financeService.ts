@@ -51,6 +51,17 @@ export async function updateSavingsPercentage(
   if (error) throw error;
 }
 
+export async function updateSavingsGoal(
+  userId: string,
+  goal: number | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ savings_goal: goal })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
 // ──────────────────────────────────────────────
 // Incomes
 // ──────────────────────────────────────────────
@@ -133,6 +144,17 @@ export async function addExpense(expense: NewExpense): Promise<Expense> {
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function updateExpense(
+  expenseId: string,
+  updates: Partial<NewExpense>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("expenses")
+    .update(updates)
+    .eq("id", expenseId);
+  if (error) throw error;
 }
 
 export async function toggleExpensePaid(
@@ -287,6 +309,7 @@ export async function confirmImportedTransaction(
       name: overrides.name,
       amount: overrides.amount,
       type: "variable",
+      category: "other",
       due_day: null,
       expense_date: tx.transaction_date ?? new Date().toISOString().slice(0, 10),
       recurring: false,

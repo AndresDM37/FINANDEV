@@ -1,22 +1,29 @@
 import React, { useState } from "react";
 import {
   X,
-  Utensils,
-  Car,
-  ShoppingBag,
-  Smile,
-  Plane,
   AlignLeft,
   Calendar,
   Wallet,
   Check,
   Coins,
 } from "lucide-react";
+import { EXPENSE_CATEGORIES } from "../utils/categories";
+import type { ExpenseCategory } from "../types/finance.types";
+
+export interface TransactionFormData {
+  name: string;
+  amount: number;
+  type: "expense" | "income";
+  category: ExpenseCategory;
+  wallet: string;
+  isSmallExpense: boolean;
+  date: string;
+}
 
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: any) => void;
+  onSubmit: (data: TransactionFormData) => void;
 }
 
 export default function TransactionModal({
@@ -27,7 +34,7 @@ export default function TransactionModal({
   const [type, setType] = useState<"expense" | "income">("expense");
   const [amount, setAmount] = useState<string>("");
   const [description, setDescription] = useState("");
-  const [categoryId, setCategoryId] = useState("food");
+  const [categoryId, setCategoryId] = useState<ExpenseCategory>("food");
   const [wallet, setWallet] = useState("Bancolombia");
   const [showWalletDropdown, setShowWalletDropdown] = useState(false);
   const [isSmallExpense, setIsSmallExpense] = useState(false);
@@ -77,13 +84,11 @@ export default function TransactionModal({
     });
   };
 
-  const categories = [
-    { id: "food", icon: <Utensils size={20} />, label: "Comida" },
-    { id: "transport", icon: <Car size={20} />, label: "Transp." },
-    { id: "shopping", icon: <ShoppingBag size={20} />, label: "Compras" },
-    { id: "fun", icon: <Smile size={20} />, label: "Ocio" },
-    { id: "travel", icon: <Plane size={20} />, label: "Viajes" },
-  ];
+  const categories = EXPENSE_CATEGORIES.map((c) => ({
+    id: c.id,
+    icon: <c.icon size={20} />,
+    label: c.label,
+  }));
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-[#0a0f18]/80 backdrop-blur-sm sm:items-center">

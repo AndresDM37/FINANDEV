@@ -1,27 +1,53 @@
 import { useState } from "react";
 import {
   TrendingUp,
+  TrendingDown,
   Wallet,
   PiggyBank,
   Edit2,
   MoreHorizontal,
   Plus,
-  Coffee,
-  Car,
-  Home,
   Zap,
   LayoutDashboard,
   PieChart,
   CreditCard,
   User,
-  Plane,
   AlertTriangle,
-  Candy,
 } from "lucide-react";
 import { useFinance } from "../hooks/useFinance";
 import { useAuth } from "../hooks/useAuth";
-import { formatCurrency } from "../utils/calculations";
-import TransactionModal from "../components/TransactionModal";
+import {
+  formatCurrency,
+  getPaymentStatus,
+  computeMonthlyVariableAverage,
+  LOW_BALANCE_RATIO,
+  type PaymentStatus,
+} from "../utils/calculations";
+import { getCategoryDef } from "../utils/categories";
+import TransactionModal, {
+  type TransactionFormData,
+} from "../components/TransactionModal";
+
+const STATUS_BADGE: Record<PaymentStatus, { label: string; className: string }> =
+  {
+    paid: {
+      label: "Pagado",
+      className:
+        "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
+    },
+    overdue: {
+      label: "Vencido",
+      className: "bg-red-500/10 text-red-500 border border-red-500/20",
+    },
+    "due-soon": {
+      label: "Vence pronto",
+      className: "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20",
+    },
+    scheduled: {
+      label: "Programado",
+      className: "bg-slate-700 text-slate-300 border border-slate-600",
+    },
+  };
 
 export default function Dashboard() {
   const {
@@ -32,16 +58,17 @@ export default function Dashboard() {
     addIncome,
     pendingImportCount,
   } = useFinance();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleTransactionSubmit = async (data: any) => {
+  const handleTransactionSubmit = async (data: TransactionFormData) => {
     try {
       if (data.type === "expense") {
         await addExpense({
           name: data.name,
           amount: data.amount,
           type: "variable",
+          category: data.category ?? "other",
           due_day: null,
           expense_date: data.date.slice(0, 10),
           recurring: false,
@@ -68,9 +95,53 @@ export default function Dashboard() {
     );
 
   const upcomingFixed = expenses
-    .filter((e) => e.type === "fixed" && !e.paid)
+    .filter((e) => e.type === "fixed")
     .sort((a, b) => (a.due_day ?? 0) - (b.due_day ?? 0))
-    .slice(0, 3); // take just 3 to match design
+    .slice(0, 5);
+
+  const pendingFixedCount = expenses.filter(
+    (e) => e.type === "fixed" && !e.paid,
+  ).length;
+
+  const recentVariables = expenses
+    .filter((e) => e.type === "variable")
+    .sort((a, b) =>
+      (b.expense_date ?? b.created_at).localeCompare(
+        a.expense_date ?? a.created_at,
+      ),
+    )
+    .slice(0, 5);
+
+  const variableAverage = computeMonthlyVariableAverage(expenses);
+  const overAverage =
+    variableAverage !== null && summary.variableSpent > variableAverage;
+
+  const alerts: { id: string; text: string; tone: "red" | "yellow" }[] = [];
+  if (
+    summary.totalIncome > 0 &&
+    summary.available < summary.totalIncome * LOW_BALANCE_RATIO
+  ) {
+    alerts.push({
+      id: "low-balance",
+      text: `Tu disponible (${formatCurrency(summary.available)}) está por debajo del ${LOW_BALANCE_RATIO * 100}% de tus ingresos del mes.`,
+      tone: "red",
+    });
+  }
+  if (overAverage && variableAverage !== null) {
+    const pct = Math.round(
+      ((summary.variableSpent - variableAverage) / variableAverage) * 100,
+    );
+    alerts.push({
+      id: "over-average",
+      text: `Tus gastos hormiga van ${pct}% por encima de tu promedio mensual (${formatCurrency(variableAverage)}).`,
+      tone: "yellow",
+    });
+  }
+
+  const savingsGoal = profile?.savings_goal ?? null;
+  const savingsProgress = savingsGoal
+    ? Math.min(100, (summary.savingsAccumulated / savingsGoal) * 100)
+    : null;
 
   return (
     <div className="min-h-screen bg-[#0e1628] text-white font-sans pb-24 overflow-x-hidden relative">
@@ -127,10 +198,9 @@ export default function Dashboard() {
               {formatCurrency(summary.available)}
             </h2>
             <div className="flex items-center gap-2 relative z-10">
-              <span className="text-[#10b981] text-xs font-bold flex items-center bg-[#10b981]/10 px-1.5 py-0.5 rounded">
-                <TrendingUp size={12} className="mr-1" /> +12%
+              <span className="text-slate-400 text-xs">
+                Lo que queda este mes tras gastos y ahorro
               </span>
-              <span className="text-slate-400 text-xs">vs mes anterior</span>
             </div>
           </div>
 
@@ -150,10 +220,9 @@ export default function Dashboard() {
               {formatCurrency(summary.totalIncome)}
             </h2>
             <div className="flex items-center gap-2">
-              <span className="text-[#10b981] text-xs font-bold flex items-center">
-                <TrendingUp size={12} className="mr-0.5" /> +5%
+              <span className="text-slate-400 text-xs">
+                Salarios y extras del mes
               </span>
-              <span className="text-slate-400 text-xs">Salarios y Extras</span>
             </div>
           </div>
 
@@ -174,32 +243,46 @@ export default function Dashboard() {
             </h2>
             <div className="flex items-center gap-2">
               <span className="text-red-400 text-xs font-bold flex items-center bg-red-400/10 px-1.5 py-0.5 rounded">
-                <AlertTriangle size={12} className="mr-1" /> Vencen Pronto
+                <AlertTriangle size={12} className="mr-1" /> Pendientes
               </span>
-              <span className="text-slate-400 text-xs">3 servicios</span>
+              <span className="text-slate-400 text-xs">
+                {pendingFixedCount}{" "}
+                {pendingFixedCount === 1 ? "servicio" : "servicios"}
+              </span>
             </div>
           </div>
 
-          {/* Card 4: Savings goal example */}
+          {/* Card 4: Savings goal */}
           <div className="min-w-[200px] lg:min-w-0 h-full bg-gradient-to-br from-[#1a233a] to-[#0e1628] border border-blue-500/20 rounded-[24px] p-5 snap-center overflow-hidden relative">
             <div className="flex items-center gap-2 mb-4">
               <div className="bg-blue-500/20 p-1.5 rounded-lg">
-                <Plane size={14} className="text-blue-400" />
+                <PiggyBank size={14} className="text-blue-400" />
               </div>
               <span className="text-xs font-bold text-blue-400 tracking-wider uppercase">
-                Viaje a Japón
+                Meta de Ahorro
               </span>
             </div>
             <p className="font-bold text-lg text-white mb-2">
-              ${formatCurrency(summary.savingsAccumulated).replace("$", "")}
+              {formatCurrency(summary.savingsAccumulated)}
             </p>
-            {/* Progress bar */}
-            <div className="w-full bg-slate-800 rounded-full h-1.5">
-              <div
-                className="bg-blue-500 h-1.5 rounded-full"
-                style={{ width: "45%" }}
-              ></div>
-            </div>
+            {savingsProgress !== null && savingsGoal ? (
+              <>
+                <div className="w-full bg-slate-800 rounded-full h-1.5">
+                  <div
+                    className="bg-blue-500 h-1.5 rounded-full"
+                    style={{ width: `${savingsProgress}%` }}
+                  ></div>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">
+                  {Math.round(savingsProgress)}% de{" "}
+                  {formatCurrency(savingsGoal)}
+                </p>
+              </>
+            ) : (
+              <p className="text-[11px] text-slate-400">
+                Define tu meta en Perfil
+              </p>
+            )}
           </div>
         </div>
 
@@ -217,6 +300,25 @@ export default function Dashboard() {
             </span>
             <span className="text-emerald-500 text-xs font-bold">Revisar →</span>
           </button>
+        )}
+
+        {/* Alertas inteligentes */}
+        {alerts.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {alerts.map((alert) => (
+              <div
+                key={alert.id}
+                className={`w-full rounded-2xl p-4 flex items-center gap-3 border ${
+                  alert.tone === "red"
+                    ? "bg-red-500/10 border-red-500/20 text-red-400"
+                    : "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
+                }`}
+              >
+                <AlertTriangle size={18} className="shrink-0" />
+                <span className="font-semibold text-sm">{alert.text}</span>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Desktop 2-Column Wrapper */}
@@ -238,79 +340,47 @@ export default function Dashboard() {
             </div>
 
             <div className="space-y-3">
-              {/* Example Item 1: Netflix (Hardcoded fallback if list is empty for visual matching) */}
-              <div className="bg-[#141b2e] border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center font-bold text-white shadow-[0_2px_10px_rgba(239,68,68,0.3)]">
-                    N
-                  </div>
-                  <div>
-                    <p className="font-bold text-sm text-slate-100">
-                      Suscripción Netflix
-                    </p>
-                    <p className="text-xs text-slate-400 font-medium">
-                      Ocio • Vence Mañana
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-[15px] text-white">-$15.99</p>
-                  <span className="inline-block mt-1 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded cursor-default">
-                    Pendiente
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-[#141b2e] border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-full bg-slate-700/60 flex items-center justify-center font-bold text-slate-300">
-                    <Home size={18} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-sm text-slate-100">
-                      Alquiler Mes
-                    </p>
-                    <p className="text-xs text-slate-400 font-medium">
-                      Hogar • Vence en 3 días
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-[15px] text-white">-$1,200.00</p>
-                  <span className="inline-block mt-1 bg-slate-700 text-slate-300 border border-slate-600 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded cursor-default">
-                    Programado
-                  </span>
-                </div>
-              </div>
-
-              {upcomingFixed.map((e, idx) => (
-                <div
-                  key={idx}
-                  className="bg-[#141b2e] border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center font-bold text-white shadow-[0_2px_10px_rgba(249,115,22,0.3)]">
-                      <Zap size={18} />
+              {upcomingFixed.map((e) => {
+                const status = getPaymentStatus(e);
+                const badge = STATUS_BADGE[status];
+                return (
+                  <div
+                    key={e.id}
+                    className="bg-[#141b2e] border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center font-bold text-white shadow-[0_2px_10px_rgba(249,115,22,0.3)]">
+                        <Zap size={18} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-slate-100">
+                          {e.name}
+                        </p>
+                        <p className="text-xs text-slate-400 font-medium">
+                          {e.due_day
+                            ? `Vence el día ${e.due_day}`
+                            : "Sin fecha de vencimiento"}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-sm text-slate-100">
-                        {e.name}
+                    <div className="text-right">
+                      <p className="font-bold text-[15px] text-white">
+                        -{formatCurrency(e.amount)}
                       </p>
-                      <p className="text-xs text-slate-400 font-medium">
-                        Vence el día {e.due_day}
-                      </p>
+                      <span
+                        className={`inline-block mt-1 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded cursor-default ${badge.className}`}
+                      >
+                        {badge.label}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-[15px] text-white">
-                      -{formatCurrency(e.amount)}
-                    </p>
-                    <span className="inline-block mt-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded cursor-default">
-                      Pagado
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
+              {upcomingFixed.length === 0 && (
+                <p className="text-sm text-slate-500 bg-[#141b2e] border border-slate-800/80 rounded-2xl p-4">
+                  Sin gastos fijos registrados.
+                </p>
+              )}
             </div>
           </div>
 
@@ -325,55 +395,71 @@ export default function Dashboard() {
               </h3>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-8">
-              <div className="bg-[#141b2e] border border-slate-800/80 rounded-2xl p-3.5 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-amber-900/40 flex items-center justify-center text-amber-500">
-                    <Coffee size={14} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-[13px] text-slate-100">
-                      Coffee
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              {recentVariables.map((e) => {
+                const cat = getCategoryDef(e.category);
+                const CatIcon = cat.icon;
+                return (
+                  <div
+                    key={e.id}
+                    className="bg-[#141b2e] border border-slate-800/80 rounded-2xl p-3.5 flex justify-between items-center"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 shrink-0 rounded-full bg-amber-900/40 flex items-center justify-center text-amber-500">
+                        <CatIcon size={14} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-[13px] text-slate-100 truncate">
+                          {e.name}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {cat.label}
+                          {e.expense_date ? ` · ${e.expense_date.slice(5)}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="font-bold text-sm shrink-0 ml-2">
+                      -{formatCurrency(e.amount)}
                     </p>
-                    <p className="text-[11px] text-slate-400">Today</p>
                   </div>
-                </div>
-                <p className="font-bold text-sm">-$5.50</p>
-              </div>
+                );
+              })}
 
-              <div className="bg-[#141b2e] border border-slate-800/80 rounded-2xl p-3.5 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-purple-900/40 flex items-center justify-center text-purple-400">
-                    <Candy size={14} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-[13px] text-slate-100">
-                      Snack
-                    </p>
-                    <p className="text-[11px] text-slate-400">Yesterday</p>
-                  </div>
-                </div>
-                <p className="font-bold text-sm">-$3.20</p>
-              </div>
-
-              <div className="bg-[#141b2e] border border-slate-800/80 rounded-2xl p-3.5 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-900/40 flex items-center justify-center text-blue-400">
-                    <Car size={14} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-[13px] text-slate-100">Uber</p>
-                    <p className="text-[11px] text-slate-400">Mon</p>
-                  </div>
-                </div>
-                <p className="font-bold text-sm">-$12.00</p>
-              </div>
-
-              <button className="bg-transparent border border-dashed border-slate-700/60 rounded-2xl p-3.5 flex items-center justify-center text-slate-500 hover:text-slate-400 hover:border-slate-600 transition-colors">
-                <span className="text-[11px] font-bold">
-                  + Agregar Frecuente
-                </span>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-transparent border border-dashed border-slate-700/60 rounded-2xl p-3.5 flex items-center justify-center text-slate-500 hover:text-slate-400 hover:border-slate-600 transition-colors"
+              >
+                <span className="text-[11px] font-bold">+ Agregar Gasto</span>
               </button>
+            </div>
+
+            {/* Total mensual + comparación con promedio */}
+            <div className="bg-[#141b2e] border border-slate-800/80 rounded-2xl p-4 mb-8 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
+                  Total este mes
+                </p>
+                <p className="font-bold text-lg text-white">
+                  {formatCurrency(summary.variableSpent)}
+                </p>
+              </div>
+              {variableAverage !== null && (
+                <span
+                  className={`text-xs font-bold flex items-center px-2 py-1 rounded ${
+                    overAverage
+                      ? "text-red-400 bg-red-400/10"
+                      : "text-emerald-500 bg-emerald-500/10"
+                  }`}
+                >
+                  {overAverage ? (
+                    <TrendingUp size={12} className="mr-1" />
+                  ) : (
+                    <TrendingDown size={12} className="mr-1" />
+                  )}
+                  {overAverage ? "Sobre" : "Bajo"} tu promedio (
+                  {formatCurrency(variableAverage)})
+                </span>
+              )}
             </div>
           </div>
         </div>

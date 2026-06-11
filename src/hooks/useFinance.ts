@@ -7,6 +7,7 @@ import {
   deleteIncome as deleteIncomeService,
   getExpenses,
   addExpense as addExpenseService,
+  updateExpense as updateExpenseService,
   toggleExpensePaid as toggleExpensePaidService,
   deleteExpense as deleteExpenseService,
   getSavingsMovements,
@@ -45,6 +46,10 @@ interface UseFinanceReturn {
   editIncome: (id: string, data: Partial<Omit<NewIncome, "user_id">>) => Promise<void>;
   removeIncome: (id: string) => Promise<void>;
   addExpense: (data: Omit<NewExpense, "user_id">) => Promise<void>;
+  editExpense: (
+    id: string,
+    data: Partial<Omit<NewExpense, "user_id">>,
+  ) => Promise<void>;
   togglePaid: (id: string, paid: boolean) => Promise<void>;
   removeExpense: (id: string) => Promise<void>;
   addSavingsMovement: (
@@ -159,6 +164,14 @@ export function useFinance(): UseFinanceReturn {
     [user, refresh],
   );
 
+  const editExpense = useCallback(
+    async (id: string, data: Partial<Omit<NewExpense, "user_id">>) => {
+      await updateExpenseService(id, data);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const togglePaid = useCallback(
     async (id: string, paid: boolean) => {
       await toggleExpensePaidService(id, paid);
@@ -236,6 +249,7 @@ export function useFinance(): UseFinanceReturn {
     editIncome,
     removeIncome,
     addExpense,
+    editExpense,
     togglePaid,
     removeExpense,
     addSavingsMovement,

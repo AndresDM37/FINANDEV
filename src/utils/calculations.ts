@@ -88,6 +88,51 @@ export function computeFinancialSummary(
   };
 }
 
+/** Si el disponible cae por debajo de este % de los ingresos, se alerta. */
+export const LOW_BALANCE_RATIO = 0.1;
+
+/** Estado de un gasto fijo respecto a su día de vencimiento. */
+export type PaymentStatus = "paid" | "overdue" | "due-soon" | "scheduled";
+
+export function getPaymentStatus(
+  expense: Expense,
+  today: Date = new Date(),
+  soonDays = 5,
+): PaymentStatus {
+  if (expense.paid) return "paid";
+  if (expense.due_day == null) return "scheduled";
+  const day = today.getDate();
+  if (expense.due_day < day) return "overdue";
+  if (expense.due_day - day <= soonDays) return "due-soon";
+  return "scheduled";
+}
+
+/**
+ * Promedio mensual de gasto variable de los últimos `monthsBack` meses
+ * completos (excluye el mes actual). Devuelve null si no hay datos previos.
+ */
+export function computeMonthlyVariableAverage(
+  expenses: Expense[],
+  monthsBack = 3,
+): number | null {
+  const now = new Date();
+  const variables = expenses.filter((e) => e.type === "variable");
+  const monthTotals: number[] = [];
+
+  for (let i = 1; i <= monthsBack; i++) {
+    const ref = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const total = filterCurrentMonth(
+      variables,
+      ref.getFullYear(),
+      ref.getMonth(),
+    ).reduce((sum, e) => sum + e.amount, 0);
+    if (total > 0) monthTotals.push(total);
+  }
+
+  if (monthTotals.length === 0) return null;
+  return monthTotals.reduce((a, b) => a + b, 0) / monthTotals.length;
+}
+
 /**
  * Formatea un número como moneda (COP / USD / EUR / etc.).
  */
