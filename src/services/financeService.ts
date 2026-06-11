@@ -54,10 +54,11 @@ export async function updateSavingsPercentage(
 export async function updateSavingsGoal(
   userId: string,
   goal: number | null,
+  name: string | null,
 ): Promise<void> {
   const { error } = await supabase
     .from("profiles")
-    .update({ savings_goal: goal })
+    .update({ savings_goal: goal, savings_goal_name: name })
     .eq("id", userId);
   if (error) throw error;
 }

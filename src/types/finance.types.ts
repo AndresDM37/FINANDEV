@@ -8,6 +8,7 @@ export interface Profile {
   email: string;
   savings_percentage: number;
   savings_goal: number | null;
+  savings_goal_name: string | null;
   created_at: string;
 }
 

@@ -258,8 +258,8 @@ export default function Dashboard() {
               <div className="bg-blue-500/20 p-1.5 rounded-lg">
                 <PiggyBank size={14} className="text-blue-400" />
               </div>
-              <span className="text-xs font-bold text-blue-400 tracking-wider uppercase">
-                Meta de Ahorro
+              <span className="text-xs font-bold text-blue-400 tracking-wider uppercase truncate">
+                {profile?.savings_goal_name || "Meta de Ahorro"}
               </span>
             </div>
             <p className="font-bold text-lg text-white mb-2">

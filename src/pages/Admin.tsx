@@ -66,12 +66,16 @@ export default function Admin() {
   const [goalInput, setGoalInput] = useState(
     profile?.savings_goal?.toString() ?? "",
   );
+  const [goalNameInput, setGoalNameInput] = useState(
+    profile?.savings_goal_name ?? "",
+  );
 
   // El perfil puede llegar después del primer render: sincronizar
   useEffect(() => {
     if (profile) {
       setPercentage(profile.savings_percentage.toString());
       setGoalInput(profile.savings_goal?.toString() ?? "");
+      setGoalNameInput(profile.savings_goal_name ?? "");
     }
   }, [profile]);
 
@@ -176,8 +180,9 @@ export default function Admin() {
     if (!profile) return;
     const parsed = parseFloat(goalInput);
     const goal = goalInput && !isNaN(parsed) && parsed > 0 ? parsed : null;
+    const name = goalNameInput.trim() || null;
     try {
-      await updateSavingsGoal(profile.id, goal);
+      await updateSavingsGoal(profile.id, goal, name);
       await refreshProfile();
     } catch {
       console.error("Error saving goal");
@@ -370,21 +375,28 @@ export default function Admin() {
 
             <div className="border-t border-slate-800/80 pt-4">
               <label className="text-xs text-slate-400 block mb-2">
-                Meta total de ahorro (deja vacío para quitarla)
+                Meta de ahorro (deja el monto vacío para quitarla)
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  placeholder="Nombre (ej. Viaje a Japón)"
+                  value={goalNameInput}
+                  onChange={(e) => setGoalNameInput(e.target.value)}
+                  className="flex-1 bg-[#0a101f] border border-slate-800 text-white px-3 py-2 rounded-lg text-sm outline-none focus:border-emerald-500/50"
+                />
                 <input
                   type="number"
                   min="1"
                   step="any"
-                  placeholder="Ej. 10.000.000"
+                  placeholder="Monto (ej. 10.000.000)"
                   value={goalInput}
                   onChange={(e) => setGoalInput(e.target.value)}
                   className="flex-1 bg-[#0a101f] border border-slate-800 text-white px-3 py-2 rounded-lg text-sm outline-none focus:border-emerald-500/50"
                 />
                 <button
                   onClick={handleGoalSave}
-                  className="text-xs font-bold text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 rounded-lg transition-colors"
+                  className="text-xs font-bold text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-lg transition-colors"
                 >
                   Guardar
                 </button>
