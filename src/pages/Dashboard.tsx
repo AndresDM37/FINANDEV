@@ -24,7 +24,14 @@ import { formatCurrency } from "../utils/calculations";
 import TransactionModal from "../components/TransactionModal";
 
 export default function Dashboard() {
-  const { summary, loading, expenses, addExpense, addIncome } = useFinance();
+  const {
+    summary,
+    loading,
+    expenses,
+    addExpense,
+    addIncome,
+    pendingImportCount,
+  } = useFinance();
   const { user } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -195,6 +202,22 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Transacciones importadas por revisar */}
+        {pendingImportCount > 0 && (
+          <button
+            onClick={() => (window.location.href = "/imported")}
+            className="w-full mt-6 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex items-center justify-between hover:bg-emerald-500/20 transition-colors"
+          >
+            <span className="font-bold text-sm text-emerald-400">
+              📬 {pendingImportCount}{" "}
+              {pendingImportCount === 1
+                ? "transacción del banco por revisar"
+                : "transacciones del banco por revisar"}
+            </span>
+            <span className="text-emerald-500 text-xs font-bold">Revisar →</span>
+          </button>
+        )}
 
         {/* Desktop 2-Column Wrapper */}
         <div className="lg:grid lg:grid-cols-2 lg:gap-12 items-start mt-8">

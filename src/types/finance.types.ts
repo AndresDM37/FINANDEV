@@ -59,6 +59,46 @@ export type NewExpense = Omit<Expense, "id" | "created_at">;
 export type NewSavingsMovement = Omit<SavingsMovement, "id" | "created_at">;
 
 // ──────────────────────────────────────────────
+// Importación de correos bancarios (Gmail)
+// ──────────────────────────────────────────────
+
+/** Banco origen del correo */
+export type ImportedBank = "bancolombia" | "nu" | "nequi";
+
+/** Estado de revisión de una transacción importada */
+export type ImportedTxStatus = "pending" | "confirmed" | "ignored";
+
+/** Transacción importada desde un correo bancario (tabla imported_transactions) */
+export interface ImportedTransaction {
+  id: string;
+  user_id: string;
+  gmail_message_id: string;
+  bank: ImportedBank;
+  direction: "expense" | "income";
+  amount: number | null;
+  merchant: string | null;
+  transaction_date: string | null; // date ISO
+  card_last4: string | null;
+  raw_subject: string;
+  raw_snippet: string;
+  parser: "regex" | "llm" | "none";
+  confidence: "high" | "medium" | "low";
+  status: ImportedTxStatus;
+  expense_id: string | null;
+  income_id: string | null;
+  created_at: string;
+}
+
+/** Estado de la conexión con Gmail (vista email_integration_status) */
+export interface EmailIntegrationStatus {
+  user_id: string;
+  gmail_address: string;
+  last_synced_at: string | null;
+  status: "active" | "error" | "revoked";
+  last_error: string | null;
+}
+
+// ──────────────────────────────────────────────
 // Resumen financiero para Dashboard
 // ──────────────────────────────────────────────
 

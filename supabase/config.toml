@@ -1,0 +1,12 @@
+# Configuración del proyecto Supabase (CLI).
+# Vincular con: supabase link --project-ref <ref>
+
+project_id = "finandev"
+
+# Google redirige al callback sin JWT; la seguridad la da el nonce de oauth_states.
+[functions.gmail-oauth-callback]
+verify_jwt = false
+
+# El cron (pg_net) llama sin JWT; la función valida x-cron-secret o el JWT del usuario.
+[functions.gmail-sync]
+verify_jwt = false

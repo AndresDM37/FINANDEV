@@ -12,6 +12,10 @@ import {
   getSavingsMovements,
   addSavingsMovement as addSavingsMovementService,
   deleteSavingsMovement as deleteSavingsMovementService,
+  getImportedTransactions,
+  confirmImportedTransaction as confirmImportedService,
+  ignoreImportedTransaction as ignoreImportedService,
+  triggerGmailSync,
 } from "../services/financeService";
 import { computeFinancialSummary } from "../utils/calculations";
 import type {
@@ -22,6 +26,7 @@ import type {
   NewExpense,
   NewSavingsMovement,
   FinancialSummary,
+  ImportedTransaction,
 } from "../types/finance.types";
 
 interface UseFinanceReturn {
@@ -29,6 +34,8 @@ interface UseFinanceReturn {
   incomes: Income[];
   expenses: Expense[];
   savingsMovements: SavingsMovement[];
+  importedTransactions: ImportedTransaction[];
+  pendingImportCount: number;
   summary: FinancialSummary;
   loading: boolean;
 
@@ -44,6 +51,12 @@ interface UseFinanceReturn {
     data: Omit<NewSavingsMovement, "user_id">,
   ) => Promise<void>;
   removeSavingsMovement: (id: string) => Promise<void>;
+  confirmImported: (
+    tx: ImportedTransaction,
+    overrides: { name: string; amount: number },
+  ) => Promise<void>;
+  ignoreImported: (id: string) => Promise<void>;
+  syncGmail: () => Promise<void>;
 }
 
 const emptySummary: FinancialSummary = {
@@ -62,6 +75,9 @@ export function useFinance(): UseFinanceReturn {
   const [savingsMovements, setSavingsMovements] = useState<SavingsMovement[]>(
     [],
   );
+  const [importedTransactions, setImportedTransactions] = useState<
+    ImportedTransaction[]
+  >([]);
   const [summary, setSummary] = useState<FinancialSummary>(emptySummary);
   const [loading, setLoading] = useState(true);
 
@@ -75,19 +91,22 @@ export function useFinance(): UseFinanceReturn {
     setLoading(true);
     try {
       console.log("Obteniendo datos de Supabase...");
-      const [inc, exp, sav] = await Promise.all([
+      const [inc, exp, sav, imported] = await Promise.all([
         getIncomes(user.id),
         getExpenses(user.id),
         getSavingsMovements(user.id),
+        getImportedTransactions(user.id),
       ]);
       console.log("Datos obtenidos con éxito", {
         incCount: inc.length,
         expCount: exp.length,
         savCount: sav.length,
+        importedCount: imported.length,
       });
       setIncomes(inc);
       setExpenses(exp);
       setSavingsMovements(sav);
+      setImportedTransactions(imported);
       setSummary(computeFinancialSummary(inc, exp, sav));
     } catch (err) {
       console.error("Error en refresh de useFinance:", err);
@@ -174,10 +193,42 @@ export function useFinance(): UseFinanceReturn {
     [refresh],
   );
 
+  // ── Imported transactions (Gmail) ───────────
+  const confirmImported = useCallback(
+    async (
+      tx: ImportedTransaction,
+      overrides: { name: string; amount: number },
+    ) => {
+      if (!profile) return;
+      await confirmImportedService(tx, overrides, profile.savings_percentage);
+      await refresh();
+    },
+    [profile, refresh],
+  );
+
+  const ignoreImported = useCallback(
+    async (id: string) => {
+      await ignoreImportedService(id);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const syncGmail = useCallback(async () => {
+    await triggerGmailSync();
+    await refresh();
+  }, [refresh]);
+
+  const pendingImportCount = importedTransactions.filter(
+    (t) => t.status === "pending",
+  ).length;
+
   return {
     incomes,
     expenses,
     savingsMovements,
+    importedTransactions,
+    pendingImportCount,
     summary,
     loading,
     refresh,
@@ -189,5 +240,8 @@ export function useFinance(): UseFinanceReturn {
     removeExpense,
     addSavingsMovement,
     removeSavingsMovement,
+    confirmImported,
+    ignoreImported,
+    syncGmail,
   };
 }

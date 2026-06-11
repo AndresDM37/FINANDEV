@@ -8,6 +8,8 @@ import type {
   NewIncome,
   NewExpense,
   NewSavingsMovement,
+  ImportedTransaction,
+  EmailIntegrationStatus,
 } from "../types/finance.types";
 
 // ──────────────────────────────────────────────
@@ -185,5 +187,125 @@ export async function deleteSavingsMovement(movementId: string): Promise<void> {
     .from("savings_movements")
     .delete()
     .eq("id", movementId);
+  if (error) throw error;
+}
+
+// ──────────────────────────────────────────────
+// Integración Gmail (importación de correos bancarios)
+// ──────────────────────────────────────────────
+
+export async function getEmailIntegrationStatus(): Promise<EmailIntegrationStatus | null> {
+  const { data, error } = await supabase
+    .from("email_integration_status")
+    .select("*")
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Inicia el flujo OAuth: crea el nonce anti-CSRF y devuelve la URL
+ * de consentimiento de Google a la que hay que redirigir.
+ */
+export async function startGmailConnect(userId: string): Promise<string> {
+  const state = crypto.randomUUID();
+  const { error } = await supabase
+    .from("oauth_states")
+    .insert({ state, user_id: userId });
+  if (error) throw error;
+
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+  if (!clientId) {
+    throw new Error("Falta la variable de entorno VITE_GOOGLE_CLIENT_ID");
+  }
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: `${supabaseUrl}/functions/v1/gmail-oauth-callback`,
+    response_type: "code",
+    scope: "https://www.googleapis.com/auth/gmail.readonly",
+    access_type: "offline",
+    prompt: "consent",
+    state,
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+export async function disconnectGmail(): Promise<void> {
+  const { error } = await supabase.rpc("disconnect_gmail");
+  if (error) throw error;
+}
+
+export async function triggerGmailSync(): Promise<void> {
+  const { error } = await supabase.functions.invoke("gmail-sync", {
+    body: { mode: "manual" },
+  });
+  if (error) throw error;
+}
+
+export async function getImportedTransactions(
+  userId: string,
+): Promise<ImportedTransaction[]> {
+  const { data, error } = await supabase
+    .from("imported_transactions")
+    .select("*")
+    .eq("user_id", userId)
+    .neq("parser", "none")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Confirma una transacción importada: la registra como gasto o ingreso
+ * (reutilizando addExpense/addIncome para conservar el auto-ahorro) y
+ * enlaza la fila importada con el registro creado.
+ */
+export async function confirmImportedTransaction(
+  tx: ImportedTransaction,
+  overrides: { name: string; amount: number },
+  savingsPercentage: number,
+): Promise<void> {
+  let expenseId: string | null = null;
+  let incomeId: string | null = null;
+
+  if (tx.direction === "income") {
+    const income = await addIncome(
+      {
+        user_id: tx.user_id,
+        amount: overrides.amount,
+        received_at: tx.transaction_date ?? new Date().toISOString().slice(0, 10),
+        source: overrides.name,
+      },
+      savingsPercentage,
+    );
+    incomeId = income.id;
+  } else {
+    const expense = await addExpense({
+      user_id: tx.user_id,
+      name: overrides.name,
+      amount: overrides.amount,
+      type: "variable",
+      due_day: null,
+      expense_date: tx.transaction_date ?? new Date().toISOString().slice(0, 10),
+      recurring: false,
+      paid: true,
+    });
+    expenseId = expense.id;
+  }
+
+  const { error } = await supabase
+    .from("imported_transactions")
+    .update({ status: "confirmed", expense_id: expenseId, income_id: incomeId })
+    .eq("id", tx.id);
+  if (error) throw error;
+}
+
+export async function ignoreImportedTransaction(txId: string): Promise<void> {
+  const { error } = await supabase
+    .from("imported_transactions")
+    .update({ status: "ignored" })
+    .eq("id", txId);
   if (error) throw error;
 }

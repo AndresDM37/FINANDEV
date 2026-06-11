@@ -4,6 +4,7 @@ import {
   DollarSign,
   CreditCard,
   PiggyBank,
+  Mail,
   Settings,
 } from "lucide-react";
 
@@ -12,6 +13,7 @@ const links = [
   { to: "/incomes", label: "Ingresos", icon: DollarSign },
   { to: "/expenses", label: "Gastos", icon: CreditCard },
   { to: "/savings", label: "Ahorros", icon: PiggyBank },
+  { to: "/imported", label: "Correos", icon: Mail },
   { to: "/admin", label: "Config", icon: Settings },
 ];
 

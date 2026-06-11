@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { formatCurrency } from "../utils/calculations";
-import { updateSavingsPercentage } from "../services/financeService";
+import {
+  updateSavingsPercentage,
+  getEmailIntegrationStatus,
+  startGmailConnect,
+  disconnectGmail,
+  triggerGmailSync,
+} from "../services/financeService";
+import type { EmailIntegrationStatus } from "../types/finance.types";
 import {
   ArrowLeft,
   MoreVertical,
@@ -16,6 +23,8 @@ import {
   PieChart,
   User,
   CreditCard,
+  Mail,
+  RefreshCw,
 } from "lucide-react";
 
 export default function Admin() {
@@ -23,6 +32,65 @@ export default function Admin() {
   const [percentage, setPercentage] = useState(
     profile?.savings_percentage?.toString() ?? "20",
   );
+
+  // ── Conexión con Gmail ──────────────────────
+  const [gmailStatus, setGmailStatus] = useState<EmailIntegrationStatus | null>(
+    null,
+  );
+  const [gmailLoading, setGmailLoading] = useState(true);
+  const [gmailNotice, setGmailNotice] = useState<string | null>(null);
+  const [gmailSyncing, setGmailSyncing] = useState(false);
+
+  useEffect(() => {
+    // Mensaje al volver del consentimiento de Google (?gmail=connected|error)
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("gmail");
+    if (result === "connected") {
+      setGmailNotice("✅ Gmail conectado correctamente.");
+    } else if (result === "error") {
+      setGmailNotice(
+        `⚠️ No se pudo conectar Gmail (${params.get("reason") ?? "error"}). Intenta de nuevo.`,
+      );
+    }
+    if (result) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    getEmailIntegrationStatus()
+      .then(setGmailStatus)
+      .catch(() => setGmailStatus(null))
+      .finally(() => setGmailLoading(false));
+  }, []);
+
+  const handleGmailConnect = async () => {
+    if (!profile) return;
+    try {
+      const url = await startGmailConnect(profile.id);
+      window.location.href = url;
+    } catch (err) {
+      setGmailNotice(`⚠️ ${err instanceof Error ? err.message : "Error al iniciar la conexión"}`);
+    }
+  };
+
+  const handleGmailDisconnect = async () => {
+    if (!window.confirm("¿Desconectar Gmail? Dejarán de importarse tus correos del banco.")) return;
+    await disconnectGmail();
+    setGmailStatus(null);
+  };
+
+  const handleGmailSync = async () => {
+    setGmailSyncing(true);
+    try {
+      await triggerGmailSync();
+      const status = await getEmailIntegrationStatus();
+      setGmailStatus(status);
+      setGmailNotice("✅ Sincronización completada. Revisa la pestaña Correos.");
+    } catch {
+      setGmailNotice("⚠️ Error al sincronizar. Revisa la conexión.");
+    } finally {
+      setGmailSyncing(false);
+    }
+  };
 
   // Fallback estimated savings
   const estAmount = 850.0;
@@ -168,6 +236,113 @@ export default function Admin() {
                 Configurar Fechas
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Conexión con Gmail */}
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="font-bold text-lg text-white">Conexión con Gmail</h2>
+            {gmailStatus && (
+              <span
+                className={`text-[11px] font-bold px-2 py-0.5 rounded uppercase tracking-wider border ${
+                  gmailStatus.status === "active"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : "bg-red-500/10 text-red-400 border-red-500/20"
+                }`}
+              >
+                {gmailStatus.status === "active"
+                  ? "Conectado"
+                  : gmailStatus.status === "revoked"
+                    ? "Revocado"
+                    : "Error"}
+              </span>
+            )}
+          </div>
+
+          <div className="bg-[#141b2e] rounded-2xl p-5 border border-slate-800/80 shadow-sm">
+            {gmailNotice && (
+              <p className="text-xs text-slate-300 mb-3">{gmailNotice}</p>
+            )}
+
+            {gmailLoading ? (
+              <p className="text-xs text-slate-400">Cargando estado...</p>
+            ) : gmailStatus ? (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-[#1e293b] border border-slate-800/80 flex items-center justify-center text-slate-300">
+                    <Mail size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-100">
+                      {gmailStatus.gmail_address}
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Última sincronización:{" "}
+                      {gmailStatus.last_synced_at
+                        ? new Date(gmailStatus.last_synced_at).toLocaleString()
+                        : "nunca"}
+                    </p>
+                  </div>
+                </div>
+
+                {gmailStatus.status === "revoked" && (
+                  <p className="text-xs text-red-400 mb-3">
+                    El acceso fue revocado en Google. Vuelve a conectar tu
+                    cuenta para seguir importando correos.
+                  </p>
+                )}
+                {gmailStatus.last_error && gmailStatus.status === "error" && (
+                  <p className="text-xs text-red-400 mb-3">
+                    {gmailStatus.last_error}
+                  </p>
+                )}
+
+                <div className="flex gap-3">
+                  {gmailStatus.status === "active" ? (
+                    <button
+                      onClick={handleGmailSync}
+                      disabled={gmailSyncing}
+                      className="flex items-center gap-2 text-xs font-bold text-emerald-500 hover:text-emerald-400 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        size={14}
+                        className={gmailSyncing ? "animate-spin" : ""}
+                      />
+                      Sincronizar ahora
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleGmailConnect}
+                      className="text-xs font-bold text-emerald-500 hover:text-emerald-400 transition-colors"
+                    >
+                      Reconectar
+                    </button>
+                  )}
+                  <button
+                    onClick={handleGmailDisconnect}
+                    className="text-xs font-bold text-red-900/60 hover:text-red-400 transition-colors"
+                  >
+                    Desconectar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-slate-400 mb-4">
+                  Conecta tu Gmail para que las compras de Bancolombia, Nu y
+                  Nequi se registren automáticamente desde los correos del
+                  banco. Solo lectura: nunca enviamos ni borramos correos.
+                </p>
+                <button
+                  onClick={handleGmailConnect}
+                  className="flex items-center gap-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-sm px-4 py-2 rounded-xl hover:bg-emerald-500/20 transition-colors"
+                >
+                  <Mail size={16} />
+                  Conectar Gmail
+                </button>
+              </>
+            )}
           </div>
         </div>
 

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Credenciales OAuth de Google (contienen el client_secret)
+credentials/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
