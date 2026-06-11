@@ -25,3 +25,4 @@ credentials/
 *.njsproj
 *.sln
 *.sw?
+.vercel
