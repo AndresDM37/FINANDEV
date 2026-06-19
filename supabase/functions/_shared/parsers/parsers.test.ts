@@ -105,6 +105,28 @@ Deno.test("bancolombia: transferencia recibida es ingreso", async () => {
   assertEquals(tx.amount, 1500000);
 });
 
+Deno.test("bancolombia: 'Compraste $X en Y' (formato real)", async () => {
+  const result = await parseFixture("bancolombia-compraste.txt");
+  assertExists(result);
+  assertEquals(result.bank, "bancolombia");
+  const tx = asTx(result.outcome);
+  assertEquals(tx.direction, "expense");
+  assertEquals(tx.amount, 7800);
+  assertEquals(tx.merchant, "DLO*Didi");
+  assertEquals(tx.date, "2026-06-16");
+  assertEquals(tx.cardLast4, "5194");
+});
+
+Deno.test("bancolombia: 'recibiste una transferencia de X por $Y' es ingreso", async () => {
+  const result = await parseFixture("bancolombia-transferencia-llave.txt");
+  assertExists(result);
+  const tx = asTx(result.outcome);
+  assertEquals(tx.direction, "income");
+  assertEquals(tx.amount, 200000);
+  assertEquals(tx.merchant, "MARCOS MARCHENA MENDOZA");
+  assertEquals(tx.date, "2026-06-16");
+});
+
 Deno.test("bancolombia: compra rechazada NO es transacción", async () => {
   const result = await parseFixture("bancolombia-rechazada.txt");
   assertExists(result);
@@ -128,6 +150,16 @@ Deno.test("nequi: compra", async () => {
   assertEquals(tx.amount, 42500);
   assertEquals(tx.merchant, "RAPPI COLOMBIA");
   assertEquals(tx.date, "2026-06-10");
+});
+
+Deno.test("nequi: 'Hiciste un pago en X por $Y' es gasto (formato real)", async () => {
+  const result = await parseFixture("nequi-pago.txt");
+  assertExists(result);
+  assertEquals(result.bank, "nequi");
+  const tx = asTx(result.outcome);
+  assertEquals(tx.direction, "expense");
+  assertEquals(tx.amount, 20230);
+  assertEquals(tx.merchant, "FONDO DE INVERSIÓN COLECTIVA ACCIVAL VISTA");
 });
 
 Deno.test("nequi: envío de plata es gasto", async () => {

@@ -18,6 +18,18 @@ const COMPRA_EN =
 const PAGASTE =
   /pagaste\s+\$?\s*([\d.,]+)\s+en\s+(.+?)(?:\.|$|\s{2})/i;
 
+// "Hiciste un pago en FONDO DE INVERSIÓN COLECTIVA ACCIVAL VISTA por $20.230"
+const HICISTE_PAGO =
+  /hiciste\s+un\s+pago\s+en\s+(.+?)\s+por\s+\$?\s*([\d.,]+)/i;
+
+// "Pagaste con Nequi tu factura por $40.800" (pago de facturas/servicios)
+const PAGO_FACTURA =
+  /pagaste\s+con\s+nequi\s+tu\s+factura\s+por\s+\$?\s*([\d.,]+)/i;
+
+// "Enviaste de manera exitosa 55.000 a la llave @..." (envíos Bre-B)
+const ENVIO_EXITOSO =
+  /enviaste\s+de\s+manera\s+exitosa\s+\$?\s*([\d.,]+)\s+a\s+(.+?)(?=\.|,|\s{2}|$)/i;
+
 // "Enviaste plata a JUAN PEREZ $30.000" / "Le enviaste $30.000 a JUAN"
 const ENVIO_A =
   /enviaste(?:\s+plata)?\s+a\s+(.+?)\s+\$?\s*([\d.,]+)/i;
@@ -60,6 +72,33 @@ function parse(
     const amount = parseAmount(m[1]);
     if (!amount) return null;
     return { direction: "expense", amount, merchant: cleanMerchant(m[2]), date, cardLast4: null };
+  }
+
+  m = text.match(HICISTE_PAGO);
+  if (m) {
+    const amount = parseAmount(m[2]);
+    if (!amount) return null;
+    return { direction: "expense", amount, merchant: cleanMerchant(m[1]), date, cardLast4: null };
+  }
+
+  m = text.match(PAGO_FACTURA);
+  if (m) {
+    const amount = parseAmount(m[1]);
+    if (!amount) return null;
+    return { direction: "expense", amount, merchant: "Pago de factura", date, cardLast4: null };
+  }
+
+  m = text.match(ENVIO_EXITOSO);
+  if (m) {
+    const amount = parseAmount(m[1]);
+    if (!amount) return null;
+    return {
+      direction: "expense",
+      amount,
+      merchant: cleanMerchant(`Envío a ${m[2]}`),
+      date,
+      cardLast4: null,
+    };
   }
 
   m = text.match(ENVIO_A);

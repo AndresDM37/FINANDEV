@@ -7,13 +7,22 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { supabaseAdmin } from "../_shared/supabaseAdmin.ts";
 import { getValidAccessToken, RevokedTokenError } from "../_shared/googleAuth.ts";
-import { getBody, getHeader, getMessage, listMessages } from "../_shared/gmail.ts";
-import { ALL_SENDERS, parseEmail } from "../_shared/parsers/index.ts";
+import {
+  getAttachment,
+  getBody,
+  getHeader,
+  getMessage,
+  findPdfAttachmentId,
+  listMessages,
+} from "../_shared/gmail.ts";
+import { ALL_SENDERS, detectBank, parseEmail } from "../_shared/parsers/index.ts";
 import { llmParse } from "../_shared/parsers/llmFallback.ts";
+import { parseNominaText } from "../_shared/parsers/siigo.ts";
 import { normalizeBody } from "../_shared/parsers/common.ts";
-import type { EmailIntegration } from "../_shared/types.ts";
+import { extractText, getDocumentProxy } from "npm:unpdf";
+import type { EmailIntegration, ParsedTransaction } from "../_shared/types.ts";
 
-const MAX_MESSAGES_PER_RUN = 25;
+const MAX_MESSAGES_PER_RUN = 50;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -57,18 +66,26 @@ async function syncIntegration(integration: EmailIntegration): Promise<SyncStats
     return stats;
   }
 
-  // Gmail `after:` trabaja en segundos; restamos 1s para no perder mensajes
-  // del mismo segundo del watermark (el dedup por message_id evita repetidos).
-  const afterSeconds = Math.max(0, Math.floor(integration.last_internal_date_ms / 1000) - 1);
+  // Primera sync (watermark 0): usamos newer_than:1y, que Gmail interpreta de
+  // forma fiable (after:0 a veces no devuelve resultados). En syncs siguientes,
+  // after:<segundos> con el watermark; el dedup por message_id evita repetidos.
+  const afterClause =
+    integration.last_internal_date_ms > 0
+      ? `after:${Math.max(0, Math.floor(integration.last_internal_date_ms / 1000) - 1)}`
+      : "newer_than:1y";
   const fromQuery = ALL_SENDERS.map((s) => `from:${s}`).join(" OR ");
-  const query = `(${fromQuery}) after:${afterSeconds}`;
+  const query = `(${fromQuery}) ${afterClause}`;
 
   const refs = await listMessages(accessToken, query, MAX_MESSAGES_PER_RUN);
   stats.fetched = refs.length;
   if (refs.length === 0) {
     await supabaseAdmin
       .from("email_integrations")
-      .update({ last_synced_at: new Date().toISOString(), status: "active", last_error: null })
+      .update({
+        last_synced_at: new Date().toISOString(),
+        status: "active",
+        last_error: null,
+      })
       .eq("user_id", integration.user_id);
     return stats;
   }
@@ -84,6 +101,7 @@ async function syncIntegration(integration: EmailIntegration): Promise<SyncStats
 
   let watermark = integration.last_internal_date_ms;
   let hadFailure = false;
+  let firstError: string | null = null;
 
   // Gmail devuelve más recientes primero; procesamos en orden cronológico
   // para que el watermark avance de forma segura.
@@ -98,34 +116,58 @@ async function syncIntegration(integration: EmailIntegration): Promise<SyncStats
       const subject = getHeader(message, "Subject");
       const body = getBody(message);
 
-      const result = parseEmail(from, subject, body, receivedAt);
-      if (!result) {
+      const bank = detectBank(from);
+      if (!bank) {
         // Remitente no reconocido (no debería pasar con el filtro from:)
         if (!hadFailure) watermark = Math.max(watermark, internalDateMs);
         continue;
       }
 
-      let outcome = result.outcome;
+      let outcome: ParsedTransaction | "not-transaction" | null;
       let parser: "regex" | "llm" | "none" = "regex";
       let confidence: "high" | "medium" | "low" = "high";
 
-      if (outcome === null) {
-        // Regex no entendió: fallback LLM
-        const llmOutcome = await llmParse(
-          result.bank,
-          subject,
-          normalizeBody(body),
-          receivedAt,
-        );
-        outcome = llmOutcome;
-        parser = llmOutcome === null ? "none" : "llm";
+      if (bank === "siigo") {
+        // Nómina: el monto vive en el PDF adjunto, no en el cuerpo.
+        outcome = null;
+        const attachmentId = findPdfAttachmentId(message);
+        if (attachmentId) {
+          const bytes = await getAttachment(accessToken, ref.id, attachmentId);
+          const pdf = await getDocumentProxy(bytes);
+          const { text } = await extractText(pdf, { mergePages: true });
+          outcome = parseNominaText(text, receivedAt);
+        }
+        // Confianza media: el monto sale de un PDF y conviene revisarlo.
         confidence = "medium";
+        parser = outcome ? "regex" : "none";
+      } else {
+        outcome = parseEmail(from, subject, body, receivedAt)?.outcome ?? null;
+
+        if (outcome === null) {
+          // Regex no entendió: fallback LLM (best-effort; si falla, no aborta
+          // el mensaje, se guarda como "none"/ignored y el watermark avanza).
+          let llmOutcome: typeof outcome = null;
+          try {
+            llmOutcome = await llmParse(
+              bank,
+              subject,
+              normalizeBody(body),
+              receivedAt,
+            );
+          } catch (llmErr) {
+            console.error(`gmail-sync: fallback LLM falló en ${ref.id}:`, llmErr);
+            if (!firstError) firstError = `Fallback LLM: ${String(llmErr)}`;
+          }
+          outcome = llmOutcome;
+          parser = llmOutcome === null ? "none" : "llm";
+          confidence = "medium";
+        }
       }
 
       const base = {
         user_id: integration.user_id,
         gmail_message_id: ref.id,
-        bank: result.bank,
+        bank,
         raw_subject: subject.slice(0, 200),
         raw_snippet: normalizeBody(body).slice(0, 300),
       };
@@ -167,10 +209,17 @@ async function syncIntegration(integration: EmailIntegration): Promise<SyncStats
       // El watermark no avanza más allá del primer mensaje fallido:
       // se reintentará en el próximo run.
       console.error(`gmail-sync: error en mensaje ${ref.id}:`, err);
+      if (!firstError) firstError = String(err);
       hadFailure = true;
       stats.errors++;
     }
   }
+
+  // Persistir un resumen del error solo cuando algo falló; en éxito, limpiar.
+  const errorSummary =
+    stats.errors > 0
+      ? `${stats.errors} de ${newRefs.length} correos no se pudieron procesar. Primero: ${firstError}`
+      : null;
 
   await supabaseAdmin
     .from("email_integrations")
@@ -178,7 +227,7 @@ async function syncIntegration(integration: EmailIntegration): Promise<SyncStats
       last_internal_date_ms: watermark,
       last_synced_at: new Date().toISOString(),
       status: "active",
-      last_error: null,
+      last_error: errorSummary,
     })
     .eq("user_id", integration.user_id);
 

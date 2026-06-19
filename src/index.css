@@ -1,7 +1,108 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────
-   FinanDev — Global Styles
+   FinanDev — Design tokens (Tailwind v4 @theme)
+   Identidad: dark navy + acento esmeralda.
+   Todo color/medida de la app deriva de aquí.
    ───────────────────────────────────────────── */
+@theme {
+  /* Superficies */
+  --color-ground: #0a0f1c; /* fondo de la app */
+  --color-surface: #131a2a; /* cards */
+  --color-surface-2: #1b2336; /* inputs / superficies elevadas */
+  --color-line: #283349; /* bordes sutiles */
+  --color-line-strong: #36425c; /* bordes con más presencia */
 
-/* ── CSS Variables ──────────────────────────── */
+  /* Texto */
+  --color-ink: #e8edf5; /* texto principal */
+  --color-muted: #8a97ad; /* texto secundario */
+  --color-faint: #5b6884; /* texto terciario / placeholders */
+
+  /* Acento */
+  --color-accent: #10b981; /* esmeralda */
+  --color-accent-bright: #34d399; /* hover / activo */
+  --color-accent-soft: #10b9811a; /* fondo translúcido del acento */
+
+  /* Semánticos */
+  --color-income: #34d399;
+  --color-expense: #f87171;
+  --color-warning: #fbbf24;
+  --color-info: #60a5fa;
+
+  /* Radios */
+  --radius-card: 1rem; /* 16px */
+  --radius-xl2: 1.5rem; /* 24px */
+
+  /* Fuente */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ── Base ───────────────────────────────────── */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Cifras monetarias alineadas (columnas de dinero) */
+.nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Ocultar scrollbar (carruseles horizontales) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Slider de rango tematizado (componente ui/Slider) */
+.fd-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+.fd-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: var(--color-accent-bright);
+  border: 3px solid var(--color-ground);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+.fd-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: var(--color-accent-bright);
+  border: 3px solid var(--color-ground);
+}
+
+/* Foco visible accesible */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

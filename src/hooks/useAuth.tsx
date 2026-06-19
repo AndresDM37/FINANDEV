@@ -10,6 +10,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../services/supabaseClient";
 import type { Profile } from "../types/finance.types";
 import { getProfile } from "../services/financeService";
+import { clearFinanceCache } from "../utils/financeCache";
 
 // ──────────────────────────────────────────────
 // Context shape
@@ -160,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     // Limpieza explícita
+    clearFinanceCache();
     setUser(null);
     setSession(null);
     setProfile(null);

@@ -1,8 +1,27 @@
 import { useState, type FormEvent } from "react";
-import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Bot, Hand, Landmark } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Bot,
+  Hand,
+  Landmark,
+  PiggyBank,
+} from "lucide-react";
 import { useFinance } from "../hooks/useFinance";
 import { formatCurrency } from "../utils/calculations";
 import type { SavingsMovementType } from "../types/finance.types";
+import {
+  PageHeader,
+  Card,
+  Input,
+  SegmentedControl,
+  Button,
+  ListRow,
+  EmptyState,
+  Loader,
+} from "../components/ui";
 
 export default function Savings() {
   const {
@@ -37,95 +56,122 @@ export default function Savings() {
     }
   };
 
-  if (loading) return <div className="page-loader">Cargando ahorros...</div>;
+  if (loading) return <Loader page label="Cargando ahorros…" />;
 
   return (
-    <div className="page">
-      <h1 className="page-title">Ahorros</h1>
+    <div className="space-y-8">
+      <PageHeader title="Ahorros" icon={<PiggyBank size={20} />} />
 
-      <div className="savings-summary">
-        <h2>
-          Acumulado:{" "}
-          <span className="text-savings">
-            {formatCurrency(summary.savingsAccumulated)}
+      {/* Acumulado */}
+      <Card variant="accent" className="relative overflow-hidden">
+        <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-info/15 blur-3xl" />
+        <div className="relative">
+          <span className="text-xs font-semibold uppercase tracking-wide text-info">
+            Total acumulado
           </span>
-        </h2>
-      </div>
+          <p className="mt-2 text-4xl font-bold nums text-info">
+            {formatCurrency(summary.savingsAccumulated)}
+          </p>
+        </div>
+      </Card>
 
-      <form onSubmit={handleAdd} className="form-inline">
-        <input
-          type="number"
-          placeholder="Monto"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          min="1"
-          step="any"
-          required
-        />
-        <select
+      {/* Registrar movimiento */}
+      <Card className="space-y-4">
+        <SegmentedControl<SavingsMovementType>
           value={type}
-          onChange={(e) => setType(e.target.value as SavingsMovementType)}
-        >
-          <option value="manual">Ahorro manual</option>
-          <option value="withdraw">Retiro</option>
-        </select>
-        <input
-          type="text"
-          placeholder="Nota (opcional)"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
+          onChange={setType}
+          segments={[
+            { value: "manual", label: "Ahorro manual" },
+            { value: "withdraw", label: "Retiro" },
+          ]}
         />
-        <button type="submit" disabled={submitting}>
-          <Plus size={16} /> Registrar
-        </button>
-      </form>
+        <form onSubmit={handleAdd} className="grid sm:grid-cols-2 gap-3">
+          <Input
+            type="number"
+            placeholder="Monto"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            min="1"
+            step="any"
+            required
+          />
+          <Input
+            placeholder="Nota (opcional)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <Button
+            type="submit"
+            loading={submitting}
+            icon={<Plus size={16} />}
+            fullWidth
+            className="sm:col-span-2"
+          >
+            Registrar movimiento
+          </Button>
+        </form>
+      </Card>
 
-      <ul className="list">
-        {savingsMovements.map((mov) => (
-          <li key={mov.id} className="list-item">
-            <div className="list-item__info">
-              {mov.amount >= 0 ? (
-                <ArrowDownCircle size={18} className="text-income" />
-              ) : (
-                <ArrowUpCircle size={18} className="text-expense" />
-              )}
-              <span className="flex items-center gap-1.5">
-                {mov.type === "auto" ? (
-                  <>
-                    <Bot size={14} className="text-slate-400" /> Auto
-                  </>
-                ) : mov.type === "manual" ? (
-                  <>
-                    <Hand size={14} className="text-slate-400" /> Manual
-                  </>
-                ) : (
-                  <>
-                    <Landmark size={14} className="text-slate-400" /> Retiro
-                  </>
-                )}
-              </span>
-              {mov.note && <span className="text-muted"> — {mov.note}</span>}
-            </div>
-            <div className="list-item__actions">
-              <span
-                className={mov.amount >= 0 ? "text-income" : "text-expense"}
-              >
-                {formatCurrency(mov.amount)}
-              </span>
-              <button
-                className="btn-icon btn-danger"
-                onClick={() => removeSavingsMovement(mov.id)}
-                title="Eliminar"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </li>
-        ))}
-        {savingsMovements.length === 0 && (
-          <li className="list-item text-muted">Sin movimientos de ahorro</li>
-        )}
-      </ul>
+      {/* Movimientos */}
+      <section className="space-y-3">
+        <h2 className="text-base font-bold">Movimientos</h2>
+        <Card className="divide-y divide-line" padded={false}>
+          <div className="px-4 sm:px-5">
+            {savingsMovements.map((mov) => (
+              <ListRow
+                key={mov.id}
+                icon={
+                  mov.amount >= 0 ? (
+                    <ArrowDownCircle size={18} className="text-income" />
+                  ) : (
+                    <ArrowUpCircle size={18} className="text-expense" />
+                  )
+                }
+                title={mov.note || (mov.type === "withdraw" ? "Retiro" : "Ahorro")}
+                subtitle={
+                  <span className="inline-flex items-center gap-1">
+                    {mov.type === "auto" ? (
+                      <>
+                        <Bot size={12} /> Automático
+                      </>
+                    ) : mov.type === "manual" ? (
+                      <>
+                        <Hand size={12} /> Manual
+                      </>
+                    ) : (
+                      <>
+                        <Landmark size={12} /> Retiro
+                      </>
+                    )}
+                  </span>
+                }
+                value={
+                  <span className={mov.amount >= 0 ? "text-income" : "text-expense"}>
+                    {mov.amount >= 0 ? "+" : ""}
+                    {formatCurrency(mov.amount)}
+                  </span>
+                }
+                actions={
+                  <button
+                    onClick={() => removeSavingsMovement(mov.id)}
+                    className="p-1.5 text-faint hover:text-expense transition-colors"
+                    title="Eliminar"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                }
+              />
+            ))}
+          </div>
+          {savingsMovements.length === 0 && (
+            <EmptyState
+              icon={<PiggyBank size={20} />}
+              title="Sin movimientos"
+              description="Registra tu primer ahorro arriba."
+            />
+          )}
+        </Card>
+      </section>
     </div>
   );
 }

@@ -3,8 +3,14 @@ import { normalizeBody } from "./common.ts";
 import { bancolombiaParser } from "./bancolombia.ts";
 import { nequiParser } from "./nequi.ts";
 import { nuParser } from "./nu.ts";
+import { siigoParser } from "./siigo.ts";
 
-export const PARSERS: BankParser[] = [bancolombiaParser, nequiParser, nuParser];
+export const PARSERS: BankParser[] = [
+  bancolombiaParser,
+  nequiParser,
+  nuParser,
+  siigoParser,
+];
 
 /** Lista de remitentes para construir el query `from:(...)` de Gmail */
 export const ALL_SENDERS = PARSERS.flatMap((p) => p.senders);

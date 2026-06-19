@@ -16,8 +16,9 @@ export interface GmailMessage {
 
 interface GmailPayload {
   mimeType: string;
+  filename?: string;
   headers: { name: string; value: string }[];
-  body?: { data?: string };
+  body?: { data?: string; attachmentId?: string };
   parts?: GmailPayload[];
 }
 
@@ -90,4 +91,38 @@ export function getBody(message: GmailMessage): string {
   if (html?.body?.data) return decodeBase64Url(html.body.data);
 
   return message.snippet ?? "";
+}
+
+/** Busca el primer adjunto con el mimeType dado (recursivo). */
+function findAttachmentPart(
+  payload: GmailPayload,
+  mimeType: string,
+): GmailPayload | null {
+  if (payload.mimeType === mimeType && payload.body?.attachmentId) return payload;
+  for (const part of payload.parts ?? []) {
+    const found = findAttachmentPart(part, mimeType);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Devuelve el attachmentId del primer adjunto PDF, o null si no hay. */
+export function findPdfAttachmentId(message: GmailMessage): string | null {
+  return findAttachmentPart(message.payload, "application/pdf")?.body
+    ?.attachmentId ?? null;
+}
+
+/** Descarga un adjunto y lo devuelve como bytes. */
+export async function getAttachment(
+  accessToken: string,
+  messageId: string,
+  attachmentId: string,
+): Promise<Uint8Array> {
+  const res = await gmailFetch(
+    accessToken,
+    `/messages/${messageId}/attachments/${attachmentId}`,
+  );
+  const data = await res.json();
+  const base64 = (data.data as string).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { useAuth } from "./useAuth";
 import {
   getIncomes,
@@ -19,6 +26,7 @@ import {
   triggerGmailSync,
 } from "../services/financeService";
 import { computeFinancialSummary } from "../utils/calculations";
+import { readFinanceCache, writeFinanceCache } from "../utils/financeCache";
 import type {
   Income,
   Expense,
@@ -29,6 +37,11 @@ import type {
   FinancialSummary,
   ImportedTransaction,
 } from "../types/finance.types";
+
+interface RefreshOpts {
+  /** No togglea `loading` (refresco en segundo plano tras mutaciones). */
+  silent?: boolean;
+}
 
 interface UseFinanceReturn {
   // Data
@@ -41,7 +54,7 @@ interface UseFinanceReturn {
   loading: boolean;
 
   // Actions
-  refresh: () => Promise<void>;
+  refresh: (opts?: RefreshOpts) => Promise<void>;
   addIncome: (data: Omit<NewIncome, "user_id">) => Promise<void>;
   editIncome: (id: string, data: Partial<Omit<NewIncome, "user_id">>) => Promise<void>;
   removeIncome: (id: string) => Promise<void>;
@@ -60,7 +73,11 @@ interface UseFinanceReturn {
     tx: ImportedTransaction,
     overrides: { name: string; amount: number },
   ) => Promise<void>;
+  confirmManyImported: (
+    items: { tx: ImportedTransaction; name: string; amount: number }[],
+  ) => Promise<void>;
   ignoreImported: (id: string) => Promise<void>;
+  ignoreManyImported: (ids: string[]) => Promise<void>;
   syncGmail: () => Promise<void>;
 }
 
@@ -72,7 +89,16 @@ const emptySummary: FinancialSummary = {
   available: 0,
 };
 
-export function useFinance(): UseFinanceReturn {
+const FinanceContext = createContext<UseFinanceReturn | undefined>(undefined);
+
+/**
+ * Provee los datos financieros una sola vez para toda la zona autenticada.
+ * - Hidrata desde caché local para que al entrar/recargar los datos aparezcan
+ *   al instante, y revalida en segundo plano (stale-while-revalidate).
+ * - `loading` solo es true en la primera carga sin caché; los refrescos tras
+ *   mutaciones son silenciosos para no desmontar las páginas (evita parpadeos).
+ */
+export function FinanceProvider({ children }: { children: ReactNode }) {
   const { user, profile } = useAuth();
 
   const [incomes, setIncomes] = useState<Income[]>([]);
@@ -87,43 +113,68 @@ export function useFinance(): UseFinanceReturn {
   const [loading, setLoading] = useState(true);
 
   // ── Fetch all data ──────────────────────────
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(
+    async (opts?: RefreshOpts) => {
+      if (!user) return;
+      if (!opts?.silent) setLoading(true);
+      try {
+        const [inc, exp, sav, imported] = await Promise.all([
+          getIncomes(user.id),
+          getExpenses(user.id),
+          getSavingsMovements(user.id),
+          getImportedTransactions(user.id),
+        ]);
+        setIncomes(inc);
+        setExpenses(exp);
+        setSavingsMovements(sav);
+        setImportedTransactions(imported);
+        setSummary(computeFinancialSummary(inc, exp, sav));
+        writeFinanceCache(user.id, {
+          incomes: inc,
+          expenses: exp,
+          savingsMovements: sav,
+          importedTransactions: imported,
+        });
+      } catch (err) {
+        console.error("Error en refresh de useFinance:", err);
+      } finally {
+        if (!opts?.silent) setLoading(false);
+      }
+    },
+    [user],
+  );
+
+  // Al montar / cambiar de usuario: hidratar de caché y revalidar en 2º plano.
+  useEffect(() => {
     if (!user) {
-      console.log("refresh omitido: no hay usuario");
+      setIncomes([]);
+      setExpenses([]);
+      setSavingsMovements([]);
+      setImportedTransactions([]);
+      setSummary(emptySummary);
+      setLoading(false);
       return;
     }
-    console.log("refresh iniciado para usuario:", user.id);
-    setLoading(true);
-    try {
-      console.log("Obteniendo datos de Supabase...");
-      const [inc, exp, sav, imported] = await Promise.all([
-        getIncomes(user.id),
-        getExpenses(user.id),
-        getSavingsMovements(user.id),
-        getImportedTransactions(user.id),
-      ]);
-      console.log("Datos obtenidos con éxito", {
-        incCount: inc.length,
-        expCount: exp.length,
-        savCount: sav.length,
-        importedCount: imported.length,
-      });
-      setIncomes(inc);
-      setExpenses(exp);
-      setSavingsMovements(sav);
-      setImportedTransactions(imported);
-      setSummary(computeFinancialSummary(inc, exp, sav));
-    } catch (err) {
-      console.error("Error en refresh de useFinance:", err);
-    } finally {
-      console.log("refresh finalizado");
-      setLoading(false);
-    }
-  }, [user]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+    const cached = readFinanceCache(user.id);
+    if (cached) {
+      setIncomes(cached.incomes);
+      setExpenses(cached.expenses);
+      setSavingsMovements(cached.savingsMovements);
+      setImportedTransactions(cached.importedTransactions);
+      setSummary(
+        computeFinancialSummary(
+          cached.incomes,
+          cached.expenses,
+          cached.savingsMovements,
+        ),
+      );
+      setLoading(false);
+      void refresh({ silent: true }); // revalidar sin loader
+    } else {
+      void refresh(); // primera carga real, con loader una sola vez
+    }
+  }, [user, refresh]);
 
   // ── Income actions ──────────────────────────
   const addIncome = useCallback(
@@ -133,7 +184,7 @@ export function useFinance(): UseFinanceReturn {
         { ...data, user_id: user.id },
         profile.savings_percentage,
       );
-      await refresh();
+      await refresh({ silent: true });
     },
     [user, profile, refresh],
   );
@@ -141,7 +192,7 @@ export function useFinance(): UseFinanceReturn {
   const editIncome = useCallback(
     async (id: string, data: Partial<Omit<NewIncome, "user_id">>) => {
       await updateIncomeService(id, data);
-      await refresh();
+      await refresh({ silent: true });
     },
     [refresh],
   );
@@ -149,7 +200,7 @@ export function useFinance(): UseFinanceReturn {
   const removeIncome = useCallback(
     async (id: string) => {
       await deleteIncomeService(id);
-      await refresh();
+      await refresh({ silent: true });
     },
     [refresh],
   );
@@ -159,7 +210,7 @@ export function useFinance(): UseFinanceReturn {
     async (data: Omit<NewExpense, "user_id">) => {
       if (!user) return;
       await addExpenseService({ ...data, user_id: user.id });
-      await refresh();
+      await refresh({ silent: true });
     },
     [user, refresh],
   );
@@ -167,7 +218,7 @@ export function useFinance(): UseFinanceReturn {
   const editExpense = useCallback(
     async (id: string, data: Partial<Omit<NewExpense, "user_id">>) => {
       await updateExpenseService(id, data);
-      await refresh();
+      await refresh({ silent: true });
     },
     [refresh],
   );
@@ -175,7 +226,7 @@ export function useFinance(): UseFinanceReturn {
   const togglePaid = useCallback(
     async (id: string, paid: boolean) => {
       await toggleExpensePaidService(id, paid);
-      await refresh();
+      await refresh({ silent: true });
     },
     [refresh],
   );
@@ -183,7 +234,7 @@ export function useFinance(): UseFinanceReturn {
   const removeExpense = useCallback(
     async (id: string) => {
       await deleteExpenseService(id);
-      await refresh();
+      await refresh({ silent: true });
     },
     [refresh],
   );
@@ -193,7 +244,7 @@ export function useFinance(): UseFinanceReturn {
     async (data: Omit<NewSavingsMovement, "user_id">) => {
       if (!user) return;
       await addSavingsMovementService({ ...data, user_id: user.id });
-      await refresh();
+      await refresh({ silent: true });
     },
     [user, refresh],
   );
@@ -201,7 +252,7 @@ export function useFinance(): UseFinanceReturn {
   const removeSavingsMovement = useCallback(
     async (id: string) => {
       await deleteSavingsMovementService(id);
-      await refresh();
+      await refresh({ silent: true });
     },
     [refresh],
   );
@@ -214,7 +265,26 @@ export function useFinance(): UseFinanceReturn {
     ) => {
       if (!profile) return;
       await confirmImportedService(tx, overrides, profile.savings_percentage);
-      await refresh();
+      await refresh({ silent: true });
+    },
+    [profile, refresh],
+  );
+
+  const confirmManyImported = useCallback(
+    async (
+      items: { tx: ImportedTransaction; name: string; amount: number }[],
+    ) => {
+      if (!profile || items.length === 0) return;
+      await Promise.all(
+        items.map((it) =>
+          confirmImportedService(
+            it.tx,
+            { name: it.name, amount: it.amount },
+            profile.savings_percentage,
+          ),
+        ),
+      );
+      await refresh({ silent: true }); // un solo refresco para todo el lote
     },
     [profile, refresh],
   );
@@ -222,21 +292,30 @@ export function useFinance(): UseFinanceReturn {
   const ignoreImported = useCallback(
     async (id: string) => {
       await ignoreImportedService(id);
-      await refresh();
+      await refresh({ silent: true });
+    },
+    [refresh],
+  );
+
+  const ignoreManyImported = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      await Promise.all(ids.map((id) => ignoreImportedService(id)));
+      await refresh({ silent: true }); // un solo refresco para todo el lote
     },
     [refresh],
   );
 
   const syncGmail = useCallback(async () => {
     await triggerGmailSync();
-    await refresh();
+    await refresh({ silent: true });
   }, [refresh]);
 
   const pendingImportCount = importedTransactions.filter(
     (t) => t.status === "pending",
   ).length;
 
-  return {
+  const value: UseFinanceReturn = {
     incomes,
     expenses,
     savingsMovements,
@@ -255,7 +334,21 @@ export function useFinance(): UseFinanceReturn {
     addSavingsMovement,
     removeSavingsMovement,
     confirmImported,
+    confirmManyImported,
     ignoreImported,
+    ignoreManyImported,
     syncGmail,
   };
+
+  return (
+    <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
+  );
+}
+
+export function useFinance(): UseFinanceReturn {
+  const ctx = useContext(FinanceContext);
+  if (!ctx) {
+    throw new Error("useFinance debe usarse dentro de <FinanceProvider>");
+  }
+  return ctx;
 }

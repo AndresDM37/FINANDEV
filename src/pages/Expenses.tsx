@@ -1,5 +1,14 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Plus, Trash2, CheckCircle, Circle, Pencil, X, Check } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  CheckCircle,
+  Circle,
+  Pencil,
+  X,
+  Check,
+  CreditCard,
+} from "lucide-react";
 import { useFinance } from "../hooks/useFinance";
 import { formatCurrency } from "../utils/calculations";
 import { EXPENSE_CATEGORIES, getCategoryDef } from "../utils/categories";
@@ -8,6 +17,18 @@ import type {
   ExpenseCategory,
   ExpenseType,
 } from "../types/finance.types";
+import {
+  PageHeader,
+  Card,
+  Input,
+  Select,
+  Switch,
+  SegmentedControl,
+  Button,
+  ListRow,
+  EmptyState,
+  Loader,
+} from "../components/ui";
 
 interface EditForm {
   name: string;
@@ -33,7 +54,6 @@ export default function Expenses() {
   const [recurring, setRecurring] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Edición inline (mismo patrón que Incomes.tsx)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [editSubmitting, setEditSubmitting] = useState(false);
@@ -111,13 +131,15 @@ export default function Expenses() {
   const fixedExpenses = expenses.filter((e) => e.type === "fixed");
   const variableExpenses = expenses.filter((e) => e.type === "variable");
 
-  // Total del mes actual por categoría (gastos variables)
   const categoryTotals = useMemo(() => {
     const now = new Date();
     const totals = new Map<ExpenseCategory, number>();
     for (const exp of variableExpenses) {
       const d = new Date(exp.expense_date ?? exp.created_at);
-      if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth())
+      if (
+        d.getFullYear() !== now.getFullYear() ||
+        d.getMonth() !== now.getMonth()
+      )
         continue;
       const cat = exp.category ?? "other";
       totals.set(cat, (totals.get(cat) ?? 0) + exp.amount);
@@ -128,59 +150,49 @@ export default function Expenses() {
     }));
   }, [variableExpenses]);
 
-  if (loading) return <div className="page-loader">Cargando gastos...</div>;
+  const monthTotal = categoryTotals.reduce((acc, c) => acc + c.total, 0);
+
+  if (loading) return <Loader page label="Cargando gastos…" />;
 
   const renderEditRow = (expType: ExpenseType) =>
     editForm && (
-      <div className="edit-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", width: "100%" }}>
-        <input
-          type="text"
+      <div className="flex flex-wrap items-center gap-2 py-3 w-full">
+        <Input
           value={editForm.name}
           onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
           placeholder="Nombre"
-          style={{ flex: 2, minWidth: 120 }}
+          className="flex-[2] min-w-[120px]"
         />
-        <input
+        <Input
           type="number"
           value={editForm.amount}
           onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
           placeholder="Monto"
           min="1"
           step="any"
-          style={{ flex: 1, minWidth: 90 }}
+          className="flex-1 min-w-[90px]"
         />
         {expType === "fixed" ? (
-          <>
-            <input
-              type="number"
-              value={editForm.dueDay}
-              onChange={(e) => setEditForm({ ...editForm, dueDay: e.target.value })}
-              placeholder="Día"
-              min="1"
-              max="31"
-              style={{ width: 70 }}
-            />
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={editForm.recurring}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, recurring: e.target.checked })
-                }
-              />
-              Recurrente
-            </label>
-          </>
+          <Input
+            type="number"
+            value={editForm.dueDay}
+            onChange={(e) => setEditForm({ ...editForm, dueDay: e.target.value })}
+            placeholder="Día"
+            min="1"
+            max="31"
+            className="w-20"
+          />
         ) : (
           <>
-            <input
+            <Input
               type="date"
               value={editForm.expenseDate}
               onChange={(e) =>
                 setEditForm({ ...editForm, expenseDate: e.target.value })
               }
+              className="w-40"
             />
-            <select
+            <Select
               value={editForm.category}
               onChange={(e) =>
                 setEditForm({
@@ -188,239 +200,250 @@ export default function Expenses() {
                   category: e.target.value as ExpenseCategory,
                 })
               }
+              className="w-32"
             >
               {EXPENSE_CATEGORIES.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </>
         )}
-        <button
-          className="btn-icon"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={cancelEdit}
           disabled={editSubmitting}
-          title="Cancelar"
-        >
-          <X size={16} />
-        </button>
-        <button
-          className="btn-icon"
+          icon={<X size={14} />}
+        />
+        <Button
+          size="sm"
           onClick={() => saveEdit(expType)}
-          disabled={editSubmitting}
-          title="Guardar"
-        >
-          <Check size={16} className="text-income" />
-        </button>
+          loading={editSubmitting}
+          icon={<Check size={14} />}
+        />
       </div>
     );
 
   return (
-    <div className="page">
-      <h1 className="page-title">Gastos</h1>
+    <div className="space-y-8">
+      <PageHeader title="Gastos" icon={<CreditCard size={20} />} />
 
-      <form onSubmit={handleAdd} className="form-inline">
-        <input
-          type="text"
-          placeholder="Nombre del gasto"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <input
-          type="number"
-          placeholder="Monto"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          min="1"
-          step="any"
-          required
-        />
-        <select
+      {/* Formulario de alta */}
+      <Card className="space-y-4">
+        <SegmentedControl<ExpenseType>
           value={type}
-          onChange={(e) => setType(e.target.value as ExpenseType)}
-        >
-          <option value="variable">Variable</option>
-          <option value="fixed">Fijo</option>
-        </select>
-
-        {type === "fixed" && (
-          <input
+          onChange={setType}
+          segments={[
+            { value: "variable", label: "Variable" },
+            { value: "fixed", label: "Fijo" },
+          ]}
+        />
+        <form onSubmit={handleAdd} className="grid sm:grid-cols-2 gap-3">
+          <Input
+            placeholder="Nombre del gasto"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+          <Input
             type="number"
-            placeholder="Día vencimiento"
-            value={dueDay}
-            onChange={(e) => setDueDay(e.target.value)}
+            placeholder="Monto"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
             min="1"
-            max="31"
+            step="any"
+            required
           />
-        )}
-
-        {type === "variable" && (
-          <>
-            <input
-              type="date"
-              value={expenseDate}
-              onChange={(e) => setExpenseDate(e.target.value)}
+          {type === "fixed" ? (
+            <Input
+              type="number"
+              placeholder="Día de vencimiento"
+              value={dueDay}
+              onChange={(e) => setDueDay(e.target.value)}
+              min="1"
+              max="31"
             />
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
-            >
-              {EXPENSE_CATEGORIES.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </>
-        )}
+          ) : (
+            <>
+              <Input
+                type="date"
+                value={expenseDate}
+                onChange={(e) => setExpenseDate(e.target.value)}
+              />
+              <Select
+                value={category}
+                onChange={(e) =>
+                  setCategory(e.target.value as ExpenseCategory)
+                }
+              >
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </Select>
+            </>
+          )}
+          <label className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-3.5 h-11 sm:col-span-2">
+            <span className="text-sm text-muted">Gasto recurrente</span>
+            <Switch checked={recurring} onChange={setRecurring} />
+          </label>
+          <Button
+            type="submit"
+            loading={submitting}
+            icon={<Plus size={16} />}
+            fullWidth
+            className="sm:col-span-2"
+          >
+            Agregar gasto
+          </Button>
+        </form>
+      </Card>
 
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={recurring}
-            onChange={(e) => setRecurring(e.target.checked)}
-          />
-          Recurrente
-        </label>
-
-        <button type="submit" disabled={submitting}>
-          <Plus size={16} /> Agregar
-        </button>
-      </form>
-
-      {/* Gastos Fijos */}
-      <section className="section">
-        <h2 className="section-title">Gastos Fijos</h2>
-        <ul className="list">
-          {fixedExpenses.map((exp) => (
-            <li key={exp.id} className="list-item">
-              {editingId === exp.id ? (
-                renderEditRow("fixed")
+      {/* Gastos fijos */}
+      <section className="space-y-3">
+        <h2 className="text-base font-bold">Gastos fijos</h2>
+        <Card className="divide-y divide-line" padded={false}>
+          <div className="px-4 sm:px-5">
+            {fixedExpenses.map((exp) =>
+              editingId === exp.id ? (
+                <div key={exp.id}>{renderEditRow("fixed")}</div>
               ) : (
-                <>
-                  <button
-                    className="btn-icon"
-                    onClick={() => togglePaid(exp.id, !exp.paid)}
-                    title={exp.paid ? "Marcar pendiente" : "Marcar pagado"}
-                  >
-                    {exp.paid ? (
-                      <CheckCircle size={18} className="text-income" />
-                    ) : (
-                      <Circle size={18} />
-                    )}
-                  </button>
-                  <div className="list-item__info">
-                    <span className={exp.paid ? "line-through" : ""}>
+                <ListRow
+                  key={exp.id}
+                  icon={
+                    <button
+                      onClick={() => togglePaid(exp.id, !exp.paid)}
+                      title={exp.paid ? "Marcar pendiente" : "Marcar pagado"}
+                      className="grid place-items-center"
+                    >
+                      {exp.paid ? (
+                        <CheckCircle size={18} className="text-income" />
+                      ) : (
+                        <Circle size={18} className="text-faint" />
+                      )}
+                    </button>
+                  }
+                  title={
+                    <span className={exp.paid ? "line-through text-muted" : ""}>
                       {exp.name}
                     </span>
-                    {exp.due_day && (
-                      <span className="text-muted"> — día {exp.due_day}</span>
-                    )}
-                  </div>
-                  <div className="list-item__actions">
-                    <span className="text-expense">
-                      {formatCurrency(exp.amount)}
-                    </span>
-                    <button
-                      className="btn-icon"
-                      onClick={() => startEdit(exp)}
-                      title="Editar"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    <button
-                      className="btn-icon btn-danger"
-                      onClick={() => removeExpense(exp.id)}
-                      title="Eliminar"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </>
-              )}
-            </li>
-          ))}
+                  }
+                  subtitle={exp.due_day ? `Vence el día ${exp.due_day}` : undefined}
+                  value={<span className="text-expense">{formatCurrency(exp.amount)}</span>}
+                  actions={
+                    <>
+                      <button
+                        onClick={() => startEdit(exp)}
+                        className="p-1.5 text-faint hover:text-accent transition-colors"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => removeExpense(exp.id)}
+                        className="p-1.5 text-faint hover:text-expense transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  }
+                />
+              ),
+            )}
+          </div>
           {fixedExpenses.length === 0 && (
-            <li className="list-item text-muted">Sin gastos fijos</li>
+            <EmptyState
+              icon={<CreditCard size={20} />}
+              title="Sin gastos fijos"
+              description="Añade tus servicios recurrentes arriba."
+            />
           )}
-        </ul>
+        </Card>
       </section>
 
-      {/* Gastos Variables */}
-      <section className="section">
-        <h2 className="section-title">Gastos Variables (hormiga)</h2>
-        <ul className="list">
-          {variableExpenses.map((exp) => {
-            const cat = getCategoryDef(exp.category);
-            const CatIcon = cat.icon;
-            return (
-              <li key={exp.id} className="list-item">
-                {editingId === exp.id ? (
-                  renderEditRow("variable")
-                ) : (
-                  <>
-                    <span className="btn-icon" title={cat.label}>
-                      <CatIcon size={16} />
-                    </span>
-                    <div className="list-item__info">
-                      <span>{exp.name}</span>
-                      <span className="text-muted">
-                        {" "}
-                        — {cat.label} · {exp.expense_date}
-                      </span>
-                    </div>
-                    <div className="list-item__actions">
-                      <span className="text-expense">
-                        {formatCurrency(exp.amount)}
-                      </span>
+      {/* Gastos variables */}
+      <section className="space-y-3">
+        <h2 className="text-base font-bold">Gastos variables (hormiga)</h2>
+        <Card className="divide-y divide-line" padded={false}>
+          <div className="px-4 sm:px-5">
+            {variableExpenses.map((exp) => {
+              const cat = getCategoryDef(exp.category);
+              const CatIcon = cat.icon;
+              return editingId === exp.id ? (
+                <div key={exp.id}>{renderEditRow("variable")}</div>
+              ) : (
+                <ListRow
+                  key={exp.id}
+                  icon={<CatIcon size={16} className="text-warning" />}
+                  title={exp.name}
+                  subtitle={`${cat.label}${exp.expense_date ? ` · ${exp.expense_date}` : ""}`}
+                  value={<span className="text-expense">{formatCurrency(exp.amount)}</span>}
+                  actions={
+                    <>
                       <button
-                        className="btn-icon"
                         onClick={() => startEdit(exp)}
-                        title="Editar"
+                        className="p-1.5 text-faint hover:text-accent transition-colors"
                       >
-                        <Pencil size={16} />
+                        <Pencil size={14} />
                       </button>
                       <button
-                        className="btn-icon btn-danger"
                         onClick={() => removeExpense(exp.id)}
-                        title="Eliminar"
+                        className="p-1.5 text-faint hover:text-expense transition-colors"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={14} />
                       </button>
-                    </div>
-                  </>
-                )}
-              </li>
-            );
-          })}
+                    </>
+                  }
+                />
+              );
+            })}
+          </div>
           {variableExpenses.length === 0 && (
-            <li className="list-item text-muted">Sin gastos variables</li>
+            <EmptyState
+              icon={<CreditCard size={20} />}
+              title="Sin gastos variables"
+              description="Registra tus gastos del día a día."
+            />
           )}
-        </ul>
+        </Card>
       </section>
 
       {/* Total del mes por categoría */}
       {categoryTotals.length > 0 && (
-        <section className="section">
-          <h2 className="section-title">Total del mes por categoría</h2>
-          <ul className="list">
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold">Este mes por categoría</h2>
+            <span className="text-sm font-semibold nums text-expense">
+              {formatCurrency(monthTotal)}
+            </span>
+          </div>
+          <Card className="space-y-3">
             {categoryTotals.map((c) => {
               const CatIcon = c.icon;
+              const widthPct = monthTotal ? (c.total / monthTotal) * 100 : 0;
               return (
-                <li key={c.id} className="list-item">
-                  <span className="btn-icon">
-                    <CatIcon size={16} />
-                  </span>
-                  <div className="list-item__info">
-                    <span>{c.label}</span>
+                <div key={c.id} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-2">
+                      <CatIcon size={14} className="text-muted" />
+                      {c.label}
+                    </span>
+                    <span className="nums font-medium">
+                      {formatCurrency(c.total)}
+                    </span>
                   </div>
-                  <span className="text-expense">{formatCurrency(c.total)}</span>
-                </li>
+                  <span className="block h-1.5 w-full rounded-full bg-surface-2">
+                    <span
+                      className="block h-1.5 rounded-full bg-accent"
+                      style={{ width: `${widthPct}%` }}
+                    />
+                  </span>
+                </div>
               );
             })}
-          </ul>
+          </Card>
         </section>
       )}
     </div>

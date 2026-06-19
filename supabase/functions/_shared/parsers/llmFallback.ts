@@ -79,9 +79,14 @@ export async function llmParse(
   });
 
   const block = response.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") return null;
+  if (!block || block.type !== "text" || !block.text) return null;
 
-  const extraction: LlmExtraction = JSON.parse(block.text);
+  let extraction: LlmExtraction;
+  try {
+    extraction = JSON.parse(block.text);
+  } catch {
+    return null; // salida no-JSON: tratar como "no entendido"
+  }
 
   if (!extraction.is_transaction) return "not-transaction";
   if (!extraction.amount || extraction.amount <= 0) return null;

@@ -25,6 +25,10 @@ const COMPRA = new RegExp(
   "i",
 );
 
+// "Compraste $7.800,00 en DLO*Didi con tu T.Deb *5194, el 16/06/2026 a las 17:46"
+const COMPRASTE =
+  /compraste\s+\$?\s*([\d.,]+)\s+en\s+(.+?)(?=\s+con\s+tu|\s+T\.\w|\s+\*\d{4}|\s+el\s+\d|,|\.|$)/i;
+
 // "Retiro por $200.000 en CAJERO ... 10/06/2026 de cuenta *5678"
 const RETIRO = new RegExp(
   /retiro\s+por\s+\$?\s*([\d.,]+)(?:\s+en\s+(.+?))?/.source + MERCHANT_END,
@@ -37,9 +41,10 @@ const FECHA = /(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/;
 const TRANSFERENCIA_SALIENTE =
   /transferencia\s+por\s+\$?\s*([\d.,]+)\s+(?:desde|de su)\s+(?:cta|cuenta|producto)/i;
 
-// "recepción de transferencia de NOMBRE por $X" / "te transfirió" — ingreso
+// "recepción de transferencia de NOMBRE por $X" / "te transfirió" / "recibiste
+// una transferencia de NOMBRE por $X en tu cuenta *1799" — ingreso
 const TRANSFERENCIA_ENTRANTE =
-  /(?:recepci[oó]n\s+de\s+transferencia|consignaci[oó]n|te\s+transfiri[oó])(?:\s+de\s+(.+?))?\s+por\s+\$?\s*([\d.,]+)/i;
+  /(?:recepci[oó]n\s+de\s+transferencia|consignaci[oó]n|te\s+transfiri[oó]|recibiste\s+una\s+transferencia)(?:\s+de\s+(.+?))?\s+por\s+\$?\s*([\d.,]+)/i;
 
 const CARD = /\*\s?(\d{4})/;
 
@@ -77,6 +82,19 @@ function parse(
       direction: "expense",
       amount,
       merchant: cleanMerchant(compra[2]),
+      date,
+      cardLast4,
+    };
+  }
+
+  const compraste = text.match(COMPRASTE);
+  if (compraste) {
+    const amount = parseAmount(compraste[1]);
+    if (!amount) return null;
+    return {
+      direction: "expense",
+      amount,
+      merchant: cleanMerchant(compraste[2]),
       date,
       cardLast4,
     };

@@ -74,8 +74,8 @@ export type NewSavingsMovement = Omit<SavingsMovement, "id" | "created_at">;
 // Importación de correos bancarios (Gmail)
 // ──────────────────────────────────────────────
 
-/** Banco origen del correo */
-export type ImportedBank = "bancolombia" | "nu" | "nequi";
+/** Banco / origen del correo (siigo = comprobante de nómina) */
+export type ImportedBank = "bancolombia" | "nu" | "nequi" | "siigo";
 
 /** Estado de revisión de una transacción importada */
 export type ImportedTxStatus = "pending" | "confirmed" | "ignored";

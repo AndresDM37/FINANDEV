@@ -2,7 +2,7 @@
 // Tipos compartidos de las Edge Functions
 // ──────────────────────────────────────────────
 
-export type Bank = "bancolombia" | "nu" | "nequi";
+export type Bank = "bancolombia" | "nu" | "nequi" | "siigo";
 
 export interface ParsedTransaction {
   direction: "expense" | "income";
