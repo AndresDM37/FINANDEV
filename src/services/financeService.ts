@@ -1,5 +1,4 @@
 import { supabase } from "./supabaseClient";
-import { calculateAutoSavings } from "../utils/calculations";
 import type {
   Profile,
   Income,
@@ -78,31 +77,16 @@ export async function getIncomes(userId: string): Promise<Income[]> {
 }
 
 /**
- * Registra un ingreso y genera automáticamente el ahorro correspondiente.
+ * Registra un ingreso. El ahorro se maneja manualmente desde la página
+ * de Ahorros (ya no se genera ningún movimiento automático).
  */
-export async function addIncome(
-  income: NewIncome,
-  savingsPercentage: number,
-): Promise<Income> {
-  // 1. Insertar ingreso
+export async function addIncome(income: NewIncome): Promise<Income> {
   const { data, error } = await supabase
     .from("incomes")
     .insert(income)
     .select()
     .single();
   if (error) throw error;
-
-  // 2. Calcular y registrar ahorro automático
-  const savingsAmount = calculateAutoSavings(income.amount, savingsPercentage);
-  if (savingsAmount > 0) {
-    await addSavingsMovement({
-      user_id: income.user_id,
-      amount: savingsAmount,
-      type: "auto",
-      note: `Ahorro automático (${savingsPercentage}%) del ingreso "${income.source}"`,
-    });
-  }
-
   return data;
 }
 
@@ -288,21 +272,17 @@ export async function getImportedTransactions(
 export async function confirmImportedTransaction(
   tx: ImportedTransaction,
   overrides: { name: string; amount: number },
-  savingsPercentage: number,
 ): Promise<void> {
   let expenseId: string | null = null;
   let incomeId: string | null = null;
 
   if (tx.direction === "income") {
-    const income = await addIncome(
-      {
-        user_id: tx.user_id,
-        amount: overrides.amount,
-        received_at: tx.transaction_date ?? new Date().toISOString().slice(0, 10),
-        source: overrides.name,
-      },
-      savingsPercentage,
-    );
+    const income = await addIncome({
+      user_id: tx.user_id,
+      amount: overrides.amount,
+      received_at: tx.transaction_date ?? new Date().toISOString().slice(0, 10),
+      source: overrides.name,
+    });
     incomeId = income.id;
   } else {
     const expense = await addExpense({

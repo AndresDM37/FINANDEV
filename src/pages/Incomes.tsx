@@ -19,6 +19,7 @@ import {
   StatCard,
   Card,
   Input,
+  AmountInput,
   Button,
   ListRow,
   EmptyState,
@@ -179,15 +180,12 @@ export default function Incomes() {
                 onChange={(e) => setSource(e.target.value)}
                 required
               />
-              <Input
+              <AmountInput
                 label="Monto"
                 icon={<DollarSign size={16} />}
-                type="number"
-                placeholder="0.00"
+                placeholder="0"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                min="1"
-                step="any"
+                onChange={setAmount}
                 required
               />
             </div>
@@ -232,11 +230,10 @@ export default function Incomes() {
                     placeholder="Fuente"
                     className="flex-[2] min-w-[120px]"
                   />
-                  <Input
-                    type="number"
+                  <AmountInput
                     value={editForm.amount}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, amount: e.target.value })
+                    onChange={(raw) =>
+                      setEditForm({ ...editForm, amount: raw })
                     }
                     placeholder="Monto"
                     className="flex-1 min-w-[90px]"

@@ -1,12 +1,25 @@
 import { useState } from "react";
-import { Check, X, RefreshCw, Mail, CheckCheck, Trash2 } from "lucide-react";
+import {
+  Check,
+  X,
+  RefreshCw,
+  Mail,
+  Inbox,
+  CheckCheck,
+  Trash2,
+  ArrowDownLeft,
+  ArrowUpRight,
+} from "lucide-react";
 import { useFinance } from "../hooks/useFinance";
 import { formatCurrency } from "../utils/calculations";
+import { cn } from "../components/ui/cn";
 import type { ImportedTransaction } from "../types/finance.types";
 import {
   PageHeader,
   Card,
-  Input,
+  StatCard,
+  Textarea,
+  AmountInput,
   Tabs,
   Badge,
   Button,
@@ -48,6 +61,15 @@ const CONFIDENCE_TONE: Record<
 };
 
 type TabKey = "pending" | "history";
+
+// Ajusta el alto de la textarea a su contenido para mostrar el nombre completo
+// sin recortes ni scroll horizontal. Estable a nivel de módulo para que React
+// no la recree en cada render.
+function autoSize(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
 
 export default function ImportedTransactions() {
   const {
@@ -92,6 +114,22 @@ export default function ImportedTransactions() {
     });
   };
 
+  // Monto válido (en edición) de una transacción pendiente, o 0 si aún no sirve.
+  const validAmount = (tx: ImportedTransaction) => {
+    const v = parseFloat(getEdit(tx).amount);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  };
+
+  const isReady = (tx: ImportedTransaction) =>
+    getEdit(tx).name.trim().length > 0 && validAmount(tx) > 0;
+
+  const pendingExpense = pending
+    .filter((t) => t.direction === "expense")
+    .reduce((sum, t) => sum + validAmount(t), 0);
+  const pendingIncome = pending
+    .filter((t) => t.direction === "income")
+    .reduce((sum, t) => sum + validAmount(t), 0);
+
   const handleSync = async () => {
     setSyncing(true);
     setSyncError(null);
@@ -99,7 +137,7 @@ export default function ImportedTransactions() {
       await syncGmail();
     } catch {
       setSyncError(
-        "No se pudo sincronizar. ¿Ya conectaste Gmail en Perfil?",
+        "No pudimos leer tu correo. Conecta Gmail desde Perfil y vuelve a sincronizar.",
       );
     } finally {
       setSyncing(false);
@@ -129,16 +167,13 @@ export default function ImportedTransactions() {
 
   // Acciones masivas sobre los pendientes (vía ConfirmDialog del sistema)
   const requestConfirmAll = () => {
-    const items = pending.filter((tx) => {
-      const e = getEdit(tx);
-      return e.name.trim() && parseFloat(e.amount) > 0;
-    });
+    const items = pending.filter((tx) => isReady(tx));
     const skipped = pending.length - items.length;
     if (items.length === 0) {
       setDialog({
-        title: "Nada para confirmar",
+        title: "Nada para registrar",
         description:
-          "Ninguna pendiente tiene nombre y monto válidos. Revisa los campos antes de aceptar.",
+          "Ninguna pendiente tiene comercio y monto válidos. Completa los campos y vuelve a intentarlo.",
         confirmLabel: "Entendido",
         hideCancel: true,
         action: async () => {},
@@ -146,9 +181,9 @@ export default function ImportedTransactions() {
       return;
     }
     setDialog({
-      title: "Aceptar todas",
+      title: "Registrar todas",
       description: `Se registrarán ${items.length} transacción(es) en Gastos/Ingresos${skipped > 0 ? ` (${skipped} sin monto válido se omitirán)` : ""}.`,
-      confirmLabel: "Aceptar todas",
+      confirmLabel: "Registrar todas",
       action: () =>
         confirmManyImported(
           items.map((tx) => {
@@ -163,9 +198,9 @@ export default function ImportedTransactions() {
     if (pending.length === 0) return;
     const items = [...pending];
     setDialog({
-      title: "Rechazar todas",
-      description: `Se rechazarán ${items.length} transacción(es). No se registrarán y saldrán de pendientes.`,
-      confirmLabel: "Rechazar todas",
+      title: "Descartar todas",
+      description: `Se descartarán ${items.length} transacción(es). No se registrarán y saldrán de pendientes.`,
+      confirmLabel: "Descartar todas",
       danger: true,
       action: () => ignoreManyImported(items.map((tx) => tx.id)),
     });
@@ -188,6 +223,7 @@ export default function ImportedTransactions() {
     <div className="space-y-6">
       <PageHeader
         title="Correos del banco"
+        subtitle="Aprueba o descarta lo que llega de tu banco"
         icon={<Mail size={20} />}
         actions={
           <Button
@@ -220,92 +256,173 @@ export default function ImportedTransactions() {
       />
 
       {tab === "pending" && (
-        <div className="space-y-3">
-          {pending.length > 0 && (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-muted">
-                {pending.length} pendiente{pending.length === 1 ? "" : "s"}
-              </span>
-              <div className="flex gap-2">
+        <div className="space-y-4">
+          {pending.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={<Inbox size={20} />}
+                title="Todo al día"
+                description="Las compras y pagos nuevos que lleguen a tu correo aparecerán aquí para que los revises."
+              />
+            </Card>
+          ) : (
+            <>
+              {/* Resumen del dinero por revisar */}
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                <StatCard
+                  label="Por revisar"
+                  value={pending.length}
+                  icon={<Inbox size={18} />}
+                />
+                <StatCard
+                  label="Gastos"
+                  tone="expense"
+                  value={formatCurrency(pendingExpense)}
+                  icon={<ArrowUpRight size={18} />}
+                />
+                {pendingIncome > 0 && (
+                  <StatCard
+                    label="Ingresos"
+                    tone="income"
+                    value={formatCurrency(pendingIncome)}
+                    icon={<ArrowDownLeft size={18} />}
+                  />
+                )}
+              </div>
+
+              {/* Acciones masivas */}
+              <div className="flex items-center justify-end gap-2">
                 <Button
+                  variant="secondary"
                   size="sm"
                   onClick={requestConfirmAll}
                   disabled={bulkWorking}
                   icon={<CheckCheck size={16} />}
                 >
-                  Aceptar todos
+                  Registrar todas
                 </Button>
                 <Button
-                  variant="danger"
+                  variant="ghost"
                   size="sm"
                   onClick={requestIgnoreAll}
                   disabled={bulkWorking}
                   icon={<Trash2 size={16} />}
                 >
-                  Rechazar todos
+                  Descartar todas
                 </Button>
               </div>
-            </div>
-          )}
-          {pending.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon={<Mail size={20} />}
-                title="Nada por revisar"
-                description="Las compras nuevas que lleguen a tu correo aparecerán aquí."
-              />
-            </Card>
-          ) : (
-            pending.map((tx) => {
-              const edit = getEdit(tx);
-              return (
-                <Card key={tx.id} className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                    <Badge tone="neutral">{BANK_LABELS[tx.bank]}</Badge>
-                    {tx.transaction_date && <span>{tx.transaction_date}</span>}
-                    {tx.card_last4 && <span>·*{tx.card_last4}</span>}
-                    <Badge tone={CONFIDENCE_TONE[tx.confidence]}>
-                      Confianza {CONFIDENCE_LABELS[tx.confidence]}
-                    </Badge>
-                    <Badge tone={tx.direction === "income" ? "income" : "expense"}>
-                      {tx.direction === "income" ? "Ingreso" : "Gasto"}
-                    </Badge>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      value={edit.name}
-                      onChange={(e) => setEdit(tx.id, "name", e.target.value)}
-                      placeholder="Nombre / comercio"
-                      className="flex-[2] min-w-[140px]"
-                    />
-                    <Input
-                      type="number"
-                      value={edit.amount}
-                      onChange={(e) => setEdit(tx.id, "amount", e.target.value)}
-                      placeholder="Monto"
-                      min="1"
-                      step="any"
-                      className="flex-1 min-w-[90px]"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => handleConfirm(tx)}
-                      disabled={workingId === tx.id || bulkWorking}
-                      icon={<Check size={16} />}
-                      title="Confirmar y registrar"
-                    />
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => handleIgnore(tx)}
-                      disabled={workingId === tx.id || bulkWorking}
-                      icon={<X size={16} />}
-                      title="Ignorar"
-                    />
-                  </div>
-                </Card>
-              );
-            })
+
+              {/* Recibos por aprobar */}
+              <div className="space-y-3">
+                {pending.map((tx) => {
+                  const edit = getEdit(tx);
+                  const isIncome = tx.direction === "income";
+                  const amount = validAmount(tx);
+                  const busy = workingId === tx.id;
+                  return (
+                    <Card
+                      key={tx.id}
+                      className={cn(
+                        "space-y-4 border-l-2",
+                        isIncome ? "border-l-income" : "border-l-expense",
+                      )}
+                    >
+                      {/* Metadata callada */}
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                        <Badge tone="neutral">{BANK_LABELS[tx.bank]}</Badge>
+                        {tx.transaction_date && (
+                          <span>{tx.transaction_date}</span>
+                        )}
+                        {tx.card_last4 && <span>·*{tx.card_last4}</span>}
+                        {tx.confidence !== "high" && (
+                          <Badge tone={CONFIDENCE_TONE[tx.confidence]}>
+                            Confianza {CONFIDENCE_LABELS[tx.confidence]}
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* Monto como protagonista */}
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 text-xs font-medium",
+                            isIncome ? "text-income" : "text-expense",
+                          )}
+                        >
+                          {isIncome ? (
+                            <ArrowDownLeft size={14} />
+                          ) : (
+                            <ArrowUpRight size={14} />
+                          )}
+                          {isIncome ? "Ingreso" : "Gasto"}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-2xl font-bold nums leading-none",
+                            amount === 0
+                              ? "text-faint"
+                              : isIncome
+                                ? "text-income"
+                                : "text-expense",
+                          )}
+                        >
+                          {amount === 0
+                            ? "—"
+                            : `${isIncome ? "+" : "−"} ${formatCurrency(amount)}`}
+                        </span>
+                      </div>
+
+                      {/* Edición */}
+                      <div className="space-y-2">
+                        <Textarea
+                          ref={autoSize}
+                          label="Comercio"
+                          rows={1}
+                          value={edit.name}
+                          onChange={(e) => {
+                            setEdit(tx.id, "name", e.target.value);
+                            autoSize(e.target);
+                          }}
+                          placeholder="Nombre del comercio"
+                          className="overflow-hidden leading-snug"
+                        />
+                        <AmountInput
+                          label="Monto"
+                          value={edit.amount}
+                          onChange={(raw) => setEdit(tx.id, "amount", raw)}
+                          placeholder="0"
+                          className="sm:max-w-[12rem]"
+                        />
+                      </div>
+
+                      {/* Acciones */}
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          size="sm"
+                          onClick={() => handleConfirm(tx)}
+                          disabled={!isReady(tx) || bulkWorking || busy}
+                          loading={busy}
+                          icon={<Check size={16} />}
+                          fullWidth
+                          className="sm:flex-1"
+                        >
+                          Registrar {isIncome ? "ingreso" : "gasto"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleIgnore(tx)}
+                          disabled={bulkWorking || busy}
+                          icon={<X size={16} />}
+                        >
+                          Descartar
+                        </Button>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -313,20 +430,48 @@ export default function ImportedTransactions() {
       {tab === "history" && (
         <Card className="divide-y divide-line" padded={false}>
           <div className="px-4 sm:px-5">
-            {history.map((tx) => (
-              <ListRow
-                key={tx.id}
-                title={tx.merchant ?? tx.raw_subject}
-                subtitle={`${BANK_LABELS[tx.bank]} · ${tx.transaction_date ?? ""} · ${tx.status === "confirmed" ? "Confirmada" : "Ignorada"}`}
-                value={tx.amount != null ? formatCurrency(tx.amount) : "—"}
-              />
-            ))}
+            {history.map((tx) => {
+              const confirmed = tx.status === "confirmed";
+              const isIncome = tx.direction === "income";
+              return (
+                <ListRow
+                  key={tx.id}
+                  icon={
+                    confirmed ? (
+                      <Check size={16} className="text-income" />
+                    ) : (
+                      <X size={16} className="text-faint" />
+                    )
+                  }
+                  title={tx.merchant ?? tx.raw_subject}
+                  subtitle={`${BANK_LABELS[tx.bank]} · ${tx.transaction_date ?? ""} · ${confirmed ? "Registrada" : "Descartada"}`}
+                  value={
+                    tx.amount == null ? (
+                      "—"
+                    ) : (
+                      <span
+                        className={cn(
+                          !confirmed
+                            ? "text-muted"
+                            : isIncome
+                              ? "text-income"
+                              : "text-expense",
+                        )}
+                      >
+                        {confirmed ? (isIncome ? "+" : "−") + " " : ""}
+                        {formatCurrency(tx.amount)}
+                      </span>
+                    )
+                  }
+                />
+              );
+            })}
           </div>
           {history.length === 0 && (
             <EmptyState
               icon={<Mail size={20} />}
               title="Sin historial"
-              description="Aquí verás las transacciones confirmadas o ignoradas."
+              description="Aquí verás las transacciones que registres o descartes."
             />
           )}
         </Card>

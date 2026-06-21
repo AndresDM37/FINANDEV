@@ -246,3 +246,12 @@ export function formatCurrency(
     minimumFractionDigits: 0,
   }).format(value);
 }
+
+/**
+ * Agrupa dígitos con puntos de miles (estilo es-CO). "1000000" -> "1.000.000".
+ * Ignora cualquier carácter no numérico; devuelve "" si no hay dígitos.
+ */
+export function formatThousands(value: string | number): string {
+  const digits = String(value).replace(/\D/g, "");
+  return digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
+}

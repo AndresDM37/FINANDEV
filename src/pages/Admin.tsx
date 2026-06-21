@@ -4,7 +4,6 @@ import { useAuth } from "../hooks/useAuth";
 import { useFinance } from "../hooks/useFinance";
 import { formatCurrency } from "../utils/calculations";
 import {
-  updateSavingsPercentage,
   updateSavingsGoal,
   getEmailIntegrationStatus,
   startGmailConnect,
@@ -36,7 +35,7 @@ import {
   PageHeader,
   Card,
   Input,
-  Slider,
+  AmountInput,
   Button,
   Badge,
   ListRow,
@@ -68,9 +67,6 @@ export default function Admin() {
     addSavingsMovement,
   } = useFinance();
 
-  const [percentage, setPercentage] = useState(
-    profile?.savings_percentage?.toString() ?? "20",
-  );
   const [goalInput, setGoalInput] = useState(
     profile?.savings_goal?.toString() ?? "",
   );
@@ -80,7 +76,6 @@ export default function Admin() {
 
   useEffect(() => {
     if (profile) {
-      setPercentage(profile.savings_percentage.toString());
       setGoalInput(profile.savings_goal?.toString() ?? "");
       setGoalNameInput(profile.savings_goal_name ?? "");
     }
@@ -163,18 +158,6 @@ export default function Admin() {
       setGmailNotice("⚠️ Error al sincronizar. Revisa la conexión.");
     } finally {
       setGmailSyncing(false);
-    }
-  };
-
-  const estAmount = (summary.totalIncome * (parseInt(percentage) || 0)) / 100;
-
-  const handleSave = async (newVal: number) => {
-    if (!profile) return;
-    try {
-      await updateSavingsPercentage(profile.id, newVal);
-      await refreshProfile();
-    } catch {
-      console.error("Error saving percentage");
     }
   };
 
@@ -299,7 +282,6 @@ export default function Admin() {
 
   const fixedExpenses = expenses.filter((e) => e.type === "fixed");
   const recentIncomes = incomes.slice(0, 5);
-  const pct = parseInt(percentage) || 0;
 
   return (
     <div className="space-y-8">
@@ -319,60 +301,29 @@ export default function Admin() {
           <h2 className="text-base font-bold">Meta de ahorro</h2>
           <Badge tone="accent">Activo</Badge>
         </div>
-        <Card className="space-y-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs text-muted">Ahorro automático</p>
-              <p className="mt-1 flex items-baseline gap-1">
-                <span className="text-4xl font-bold nums">{percentage}</span>
-                <span className="text-lg font-bold text-accent">%</span>
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-muted">Monto estimado</p>
-              <p className="mt-1 font-bold nums">{formatCurrency(estAmount)}</p>
-            </div>
-          </div>
-
-          <div>
-            <Slider
-              min={0}
-              max={50}
-              value={pct}
-              onChange={(e) => setPercentage(e.target.value)}
-              onMouseUp={() => handleSave(pct)}
-              onTouchEnd={() => handleSave(pct)}
+        <Card className="space-y-4">
+          <p className="text-sm text-muted">
+            Define tu meta (nombre y monto). El ahorro es manual: regístralo
+            cuando quieras en la pestaña <span className="font-semibold text-ink">Ahorros</span>.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input
+              placeholder="Nombre (ej. Moto)"
+              value={goalNameInput}
+              onChange={(e) => setGoalNameInput(e.target.value)}
+              className="flex-1"
             />
-            <div className="mt-2 flex justify-between text-xs font-medium text-faint">
-              <span>0%</span>
-              <span>25%</span>
-              <span>50%</span>
-            </div>
+            <AmountInput
+              placeholder="Monto"
+              value={goalInput}
+              onChange={setGoalInput}
+              className="flex-1"
+            />
+            <Button onClick={handleGoalSave}>Guardar</Button>
           </div>
-
-          <div className="border-t border-line pt-4 space-y-2">
-            <p className="text-xs text-muted">
-              Meta de ahorro (deja el monto vacío para quitarla)
-            </p>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Input
-                placeholder="Nombre (ej. Viaje a Japón)"
-                value={goalNameInput}
-                onChange={(e) => setGoalNameInput(e.target.value)}
-                className="flex-1"
-              />
-              <Input
-                type="number"
-                min="1"
-                step="any"
-                placeholder="Monto"
-                value={goalInput}
-                onChange={(e) => setGoalInput(e.target.value)}
-                className="flex-1"
-              />
-              <Button onClick={handleGoalSave}>Guardar</Button>
-            </div>
-          </div>
+          <p className="text-xs text-faint">
+            Deja el monto vacío para quitar la meta.
+          </p>
         </Card>
       </section>
 
@@ -495,11 +446,10 @@ export default function Admin() {
                     placeholder="Fuente"
                     className="flex-1 min-w-[120px]"
                   />
-                  <Input
-                    type="number"
+                  <AmountInput
                     value={incomeForm.amount}
-                    onChange={(e) =>
-                      setIncomeForm({ ...incomeForm, amount: e.target.value })
+                    onChange={(raw) =>
+                      setIncomeForm({ ...incomeForm, amount: raw })
                     }
                     placeholder="Monto"
                     className="w-32"
@@ -585,11 +535,10 @@ export default function Admin() {
                     placeholder="Nombre"
                     className="flex-1 min-w-[120px]"
                   />
-                  <Input
-                    type="number"
+                  <AmountInput
                     value={expenseForm.amount}
-                    onChange={(e) =>
-                      setExpenseForm({ ...expenseForm, amount: e.target.value })
+                    onChange={(raw) =>
+                      setExpenseForm({ ...expenseForm, amount: raw })
                     }
                     placeholder="Monto"
                     className="w-28"
@@ -665,13 +614,10 @@ export default function Admin() {
             Registrar un retiro del ahorro (viaje, compra, etc.)
           </p>
           <div className="flex flex-wrap gap-2">
-            <Input
-              type="number"
-              min="1"
-              step="any"
+            <AmountInput
               placeholder="Monto"
               value={withdrawAmount}
-              onChange={(e) => setWithdrawAmount(e.target.value)}
+              onChange={setWithdrawAmount}
               className="w-32"
             />
             <Input

@@ -99,7 +99,7 @@ const FinanceContext = createContext<UseFinanceReturn | undefined>(undefined);
  *   mutaciones son silenciosos para no desmontar las páginas (evita parpadeos).
  */
 export function FinanceProvider({ children }: { children: ReactNode }) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
 
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -179,14 +179,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // ── Income actions ──────────────────────────
   const addIncome = useCallback(
     async (data: Omit<NewIncome, "user_id">) => {
-      if (!user || !profile) return;
-      await addIncomeService(
-        { ...data, user_id: user.id },
-        profile.savings_percentage,
-      );
+      if (!user) return;
+      await addIncomeService({ ...data, user_id: user.id });
       await refresh({ silent: true });
     },
-    [user, profile, refresh],
+    [user, refresh],
   );
 
   const editIncome = useCallback(
@@ -263,30 +260,25 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       tx: ImportedTransaction,
       overrides: { name: string; amount: number },
     ) => {
-      if (!profile) return;
-      await confirmImportedService(tx, overrides, profile.savings_percentage);
+      await confirmImportedService(tx, overrides);
       await refresh({ silent: true });
     },
-    [profile, refresh],
+    [refresh],
   );
 
   const confirmManyImported = useCallback(
     async (
       items: { tx: ImportedTransaction; name: string; amount: number }[],
     ) => {
-      if (!profile || items.length === 0) return;
+      if (items.length === 0) return;
       await Promise.all(
         items.map((it) =>
-          confirmImportedService(
-            it.tx,
-            { name: it.name, amount: it.amount },
-            profile.savings_percentage,
-          ),
+          confirmImportedService(it.tx, { name: it.name, amount: it.amount }),
         ),
       );
       await refresh({ silent: true }); // un solo refresco para todo el lote
     },
-    [profile, refresh],
+    [refresh],
   );
 
   const ignoreImported = useCallback(

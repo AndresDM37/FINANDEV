@@ -21,6 +21,7 @@ import {
   PageHeader,
   Card,
   Input,
+  AmountInput,
   Select,
   Switch,
   SegmentedControl,
@@ -163,13 +164,10 @@ export default function Expenses() {
           placeholder="Nombre"
           className="flex-[2] min-w-[120px]"
         />
-        <Input
-          type="number"
+        <AmountInput
           value={editForm.amount}
-          onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+          onChange={(raw) => setEditForm({ ...editForm, amount: raw })}
           placeholder="Monto"
-          min="1"
-          step="any"
           className="flex-1 min-w-[90px]"
         />
         {expType === "fixed" ? (
@@ -247,13 +245,10 @@ export default function Expenses() {
             onChange={(e) => setName(e.target.value)}
             required
           />
-          <Input
-            type="number"
+          <AmountInput
             placeholder="Monto"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            min="1"
-            step="any"
+            onChange={setAmount}
             required
           />
           {type === "fixed" ? (

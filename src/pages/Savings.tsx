@@ -16,6 +16,7 @@ import {
   PageHeader,
   Card,
   Input,
+  AmountInput,
   SegmentedControl,
   Button,
   ListRow,
@@ -86,13 +87,10 @@ export default function Savings() {
           ]}
         />
         <form onSubmit={handleAdd} className="grid sm:grid-cols-2 gap-3">
-          <Input
-            type="number"
+          <AmountInput
             placeholder="Monto"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            min="1"
-            step="any"
+            onChange={setAmount}
             required
           />
           <Input
