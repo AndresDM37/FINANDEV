@@ -2,15 +2,19 @@ import { useMemo, useState, type FormEvent } from "react";
 import {
   Plus,
   Trash2,
-  CheckCircle,
-  Circle,
   Pencil,
   X,
   Check,
+  Undo2,
+  Wallet,
   CreditCard,
 } from "lucide-react";
 import { useFinance } from "../hooks/useFinance";
-import { formatCurrency } from "../utils/calculations";
+import {
+  formatCurrency,
+  getPaymentStatus,
+  type PaymentStatus,
+} from "../utils/calculations";
 import { EXPENSE_CATEGORIES, getCategoryDef } from "../utils/categories";
 import type {
   Expense,
@@ -20,13 +24,16 @@ import type {
 import {
   PageHeader,
   Card,
+  StatCard,
   Input,
   AmountInput,
   Select,
   Switch,
   SegmentedControl,
   Button,
+  Badge,
   ListRow,
+  ConfirmDialog,
   EmptyState,
   Loader,
 } from "../components/ui";
@@ -39,6 +46,23 @@ interface EditForm {
   recurring: boolean;
   category: ExpenseCategory;
 }
+
+const STATUS_BADGE: Record<
+  PaymentStatus,
+  { label: string; tone: "income" | "expense" | "warning" | "neutral" }
+> = {
+  paid: { label: "Pagado", tone: "income" },
+  overdue: { label: "Vencido", tone: "expense" },
+  "due-soon": { label: "Vence pronto", tone: "warning" },
+  scheduled: { label: "Programado", tone: "neutral" },
+};
+
+const STATUS_ORDER: Record<PaymentStatus, number> = {
+  overdue: 0,
+  "due-soon": 1,
+  scheduled: 2,
+  paid: 3,
+};
 
 export default function Expenses() {
   const { expenses, loading, addExpense, editExpense, togglePaid, removeExpense } =
@@ -58,6 +82,7 @@ export default function Expenses() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<Expense | null>(null);
 
   const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
@@ -131,6 +156,25 @@ export default function Expenses() {
 
   const fixedExpenses = expenses.filter((e) => e.type === "fixed");
   const variableExpenses = expenses.filter((e) => e.type === "variable");
+
+  const sortedFixed = useMemo(
+    () =>
+      [...fixedExpenses].sort(
+        (a, b) =>
+          STATUS_ORDER[getPaymentStatus(a)] - STATUS_ORDER[getPaymentStatus(b)] ||
+          (a.due_day ?? 99) - (b.due_day ?? 99),
+      ),
+    [fixedExpenses],
+  );
+
+  const fixedTotal = fixedExpenses.reduce((s, e) => s + e.amount, 0);
+  const fixedPaidAmount = fixedExpenses
+    .filter((e) => e.paid)
+    .reduce((s, e) => s + e.amount, 0);
+  const fixedPendingAmount = fixedTotal - fixedPaidAmount;
+  const paidCount = fixedExpenses.filter((e) => e.paid).length;
+  const totalCount = fixedExpenses.length;
+  const paidPct = fixedTotal ? (fixedPaidAmount / fixedTotal) * 100 : 0;
 
   const categoryTotals = useMemo(() => {
     const now = new Date();
@@ -300,53 +344,114 @@ export default function Expenses() {
       {/* Gastos fijos */}
       <section className="space-y-3">
         <h2 className="text-base font-bold">Gastos fijos</h2>
+
+        {/* Resumen de pagos del mes */}
+        {totalCount > 0 && (
+          <Card className="space-y-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium text-ink">
+                {paidCount} de {totalCount} pagados
+              </span>
+              <span className="text-muted nums">{Math.round(paidPct)}%</span>
+            </div>
+            <span className="block h-2 w-full rounded-full bg-surface-2">
+              <span
+                className="block h-2 rounded-full bg-income transition-all"
+                style={{ width: `${paidPct}%` }}
+              />
+            </span>
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard
+                label="Pagado"
+                value={formatCurrency(fixedPaidAmount)}
+                tone="income"
+                icon={<Check size={16} />}
+              />
+              <StatCard
+                label="Pendiente"
+                value={formatCurrency(fixedPendingAmount)}
+                tone="expense"
+                icon={<Wallet size={16} />}
+              />
+            </div>
+          </Card>
+        )}
+
         <Card className="divide-y divide-line" padded={false}>
           <div className="px-4 sm:px-5">
-            {fixedExpenses.map((exp) =>
-              editingId === exp.id ? (
-                <div key={exp.id}>{renderEditRow("fixed")}</div>
-              ) : (
+            {sortedFixed.map((exp) => {
+              if (editingId === exp.id)
+                return <div key={exp.id}>{renderEditRow("fixed")}</div>;
+              const status = getPaymentStatus(exp);
+              const badge = STATUS_BADGE[status];
+              return (
                 <ListRow
                   key={exp.id}
+                  className={exp.paid ? "opacity-55" : undefined}
                   icon={
-                    <button
-                      onClick={() => togglePaid(exp.id, !exp.paid)}
-                      title={exp.paid ? "Marcar pendiente" : "Marcar pagado"}
-                      className="grid place-items-center"
-                    >
-                      {exp.paid ? (
-                        <CheckCircle size={18} className="text-income" />
-                      ) : (
-                        <Circle size={18} className="text-faint" />
-                      )}
-                    </button>
+                    <CreditCard
+                      size={16}
+                      className={exp.paid ? "text-income" : "text-muted"}
+                    />
                   }
                   title={
-                    <span className={exp.paid ? "line-through text-muted" : ""}>
-                      {exp.name}
+                    <span className="flex items-center gap-2">
+                      <span className={exp.paid ? "line-through text-muted" : ""}>
+                        {exp.name}
+                      </span>
+                      <Badge tone={badge.tone}>{badge.label}</Badge>
                     </span>
                   }
-                  subtitle={exp.due_day ? `Vence el día ${exp.due_day}` : undefined}
-                  value={<span className="text-expense">{formatCurrency(exp.amount)}</span>}
+                  subtitle={
+                    exp.due_day
+                      ? `Vence el día ${exp.due_day}`
+                      : "Sin fecha de vencimiento"
+                  }
+                  value={
+                    <span className="text-expense">
+                      {formatCurrency(exp.amount)}
+                    </span>
+                  }
                   actions={
                     <>
+                      {exp.paid ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={<Undo2 size={14} />}
+                          onClick={() => togglePaid(exp.id, false)}
+                        >
+                          Deshacer
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<Check size={14} />}
+                          onClick={() => togglePaid(exp.id, true)}
+                        >
+                          Pagar
+                        </Button>
+                      )}
                       <button
                         onClick={() => startEdit(exp)}
                         className="p-1.5 text-faint hover:text-accent transition-colors"
+                        aria-label="Editar"
                       >
                         <Pencil size={14} />
                       </button>
                       <button
-                        onClick={() => removeExpense(exp.id)}
+                        onClick={() => setConfirmDelete(exp)}
                         className="p-1.5 text-faint hover:text-expense transition-colors"
+                        aria-label="Borrar"
                       >
                         <Trash2 size={14} />
                       </button>
                     </>
                   }
                 />
-              ),
-            )}
+              );
+            })}
           </div>
           {fixedExpenses.length === 0 && (
             <EmptyState
@@ -384,7 +489,7 @@ export default function Expenses() {
                         <Pencil size={14} />
                       </button>
                       <button
-                        onClick={() => removeExpense(exp.id)}
+                        onClick={() => setConfirmDelete(exp)}
                         className="p-1.5 text-faint hover:text-expense transition-colors"
                       >
                         <Trash2 size={14} />
@@ -441,6 +546,23 @@ export default function Expenses() {
           </Card>
         </section>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Borrar gasto"
+        description={
+          confirmDelete
+            ? `¿Borrar "${confirmDelete.name}"? Esta acción no se puede deshacer.`
+            : undefined
+        }
+        confirmLabel="Borrar"
+        danger
+        onConfirm={() => {
+          if (confirmDelete) removeExpense(confirmDelete.id);
+          setConfirmDelete(null);
+        }}
+        onClose={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }
